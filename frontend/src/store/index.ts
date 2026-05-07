@@ -1,0 +1,1 @@
+export { useJournalistStore } from './journalistStore';

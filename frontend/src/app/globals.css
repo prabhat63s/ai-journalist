@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-muted-dark: var(--muted-dark);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --font-sans: system-ui, -apple-system, sans-serif;
+}
+
+/* ─── Light Theme ─── */
+:root {
+  --background: #ffffff;
+  --foreground: #1a1a19;
+  --surface: #f5f4f2;
+  --surface-hover: #eeede9;
+  --surface-elevated: #ffffff;
+  --border: #d1d5db;
+  --border-light: #e5e4de;
+
+  --primary: #534AB7;
+  --primary-hover: #3f3680;
+  --primary-glow: rgba(83, 74, 183, 0.08);
+  --accent: #534AB7;
+  --accent-light: #f3f0ff;
+  --accent-text: #534AB7;
+  --accent-glow: rgba(83, 74, 183, 0.08);
+
+  --muted: #888780;
+  --muted-dark: #5f5e5a;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+
+  --glass-bg: rgba(255, 255, 255, 0.90);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-vivid: rgba(83, 74, 183, 0.08);
+
+  --primary-gradient: linear-gradient(135deg, #534AB7 0%, #7c5ddb 100%);
+  --hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(83, 74, 183, 0.04) 0%, transparent 60%);
+  --grid-color: rgba(0, 0, 0, 0.03);
+}
+
+/* ─── Dark Theme ─── */
+.dark {
+  --background: #171717;
+  --foreground: #f0ede8;
+  --surface: #272725;
+  --surface-hover: #2e2e2b;
+  --surface-elevated: #1e1e1d;
+  --border: rgba(255, 255, 255, 0.14);
+  --border-light: rgba(255, 255, 255, 0.22);
+
+  --primary: #7060c8;
+  --primary-hover: #8878d8;
+  --primary-glow: rgba(112, 96, 200, 0.12);
+  --accent: #7060c8;
+  --accent-light: rgba(112, 96, 200, 0.09);
+  --accent-text: #b0a4f0;
+  --accent-glow: rgba(112, 96, 200, 0.08);
+
+  --muted: #b8b4ae;
+  --muted-dark: #9a9894;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+
+  --glass-bg: rgba(30, 30, 29, 0.92);
+  --glass-border: rgba(255, 255, 255, 0.07);
+  --glass-border-vivid: rgba(124, 93, 219, 0.10);
+
+  --primary-gradient: linear-gradient(135deg, #7c5ddb 0%, #9575e3 100%);
+  --hero-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124, 93, 219, 0.04) 0%, transparent 60%);
+  --grid-color: rgba(255, 255, 255, 0.025);
+}
+
+/* ─── Base ─── */
+body {
+  @apply bg-background text-foreground;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: -0.008em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+.hide-scrollbar, .no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar, .no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0 !important;
+}
+
+/* --- Utilities --- */
+@layer utilities {
+  /* Grounded Citations */
+  .grounded-citation {
+    @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-[#EAF3DE] border border-[#97C459]/30 text-[#3B6D11] text-[10px] font-bold uppercase tracking-wider mx-0.5 align-baseline cursor-help transition-all hover:bg-[#D9EBB5];
+  }
+
+  .dark .grounded-citation {
+    @apply bg-[#1a2e10] border-[#97C459]/20 text-[#97C459] hover:bg-[#253d16];
+  }
+
+  /* Selection styling */
+  ::selection {
+    background-color: var(--primary);
+    color: white;
+  }
+
+  .section-label {
+    @apply text-[10px] font-medium uppercase tracking-[0.08em] text-muted flex items-center gap-2 mt-8 mb-4;
+  }
+
+  .section-label::after {
+    content: '';
+    @apply flex-1 h-[0.5px] bg-border;
+  }
+
+  /* Redesign Utilities */
+  .border-thin {
+    border: 0.5px solid var(--border);
+  }
+
+  .border-thin-b {
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .border-thin-r {
+    border-right: 0.5px solid var(--border);
+  }
+}
+
+/* ─── Prose Refinement ─── */
+.prose-premium {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted-dark);
+  --tw-prose-links: var(--primary);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--primary);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--primary);
+  --tw-prose-captions: var(--muted);
+  --tw-prose-code: var(--primary);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--surface);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border-light);
+}
+
+.prose-premium h1 {
+  @apply text-2xl sm:text-3xl font-bold tracking-tighter mb-4 leading-[1.15] text-foreground;
+}
+
+.prose-premium h2 {
+  @apply text-lg sm:text-xl font-bold tracking-tight mt-5 leading-tight text-foreground;
+}
+
+.prose-premium h3 {
+  @apply text-base sm:text-lg font-semibold tracking-tight mt-5 leading-snug text-foreground;
+}
+
+.prose-premium p {
+  @apply text-[12px] md:text-[14px] leading-[1.85] my-2 text-foreground/90 font-normal;
+}
+
+.prose-premium a {
+  @apply text-primary font-medium underline underline-offset-4 decoration-primary/30 hover:decoration-primary transition-colors;
+}
+
+.prose-premium blockquote {
+  @apply border-l-4 border-primary/20 pl-6 py-2 italic text-muted-dark my-10;
+}
+
+.prose-premium .ProseMirror {
+  @apply outline-none min-h-auto;
+}
+
+/* ─── Paper Sheet Container ─── */
+.paper-sheet {
+  @apply bg-white dark:bg-[#0a0a09] border border-border/80 rounded-xl transition-all duration-300;
+}
+
+.paper-sheet:focus-within {
+  @apply border-primary/20 bg-white/95 dark:bg-[#0a0a09]/90;
+}
+
+/* ─── Print Styles for Exports ─── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .printable-content,
+  .printable-content * {
+    visibility: visible;
+  }
+
+  .printable-content {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+
+
+/* Stage overlay color */
+.driver-stage {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(4px);
+}
