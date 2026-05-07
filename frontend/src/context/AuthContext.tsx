@@ -72,15 +72,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Backend confirmed the user no longer exists (stale localStorage token,
-      // e.g. after a fresh DB reset). Force logout to clear the invalid session.
+      // Token is invalid, expired, or the user no longer exists in the DB.
+      // Clear the stale localStorage session so the user is prompted to log in.
       const lowMsg = msg.toLowerCase();
       if (
         lowMsg.includes('user not found') ||
         lowMsg.includes('not found') ||
-        msg.includes('Authentication required')
+        lowMsg.includes('invalid token') ||
+        lowMsg.includes('authentication required') ||
+        msg === '401'
       ) {
-        console.warn('Preferences: user not found on backend - clearing stale session.');
+        console.warn('Preferences: invalid/expired session - clearing stale session.');
         logout();
         return;
       }

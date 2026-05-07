@@ -7,7 +7,6 @@ httpx==0.28.1
 pydantic[email]>=2.11.0
 pydantic-settings>=2.7.0
 openai>=1.64.0
-litellm>=1.53.0
 google-genai>=1.0.0
 pypdf>=3.17.0
 beautifulsoup4>=4.12.0

@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 function getStoredUserEmail(): string | null {
   if (typeof window === 'undefined') return null;
@@ -75,13 +75,14 @@ export class ApiClient {
         errorMessage = `HTTP ${response.status}: ${response.statusText}`;
       }
 
-      // Normalise HTTP status codes into readable messages
-      if (response.status === 401) errorMessage = '401';
-      else if (response.status === 403) errorMessage = '403';
-      else if (response.status === 404) errorMessage = '404';
-      else if (response.status === 422) errorMessage = '422';
-      else if (response.status === 429) errorMessage = '429';
-      else if (response.status >= 500) errorMessage = '500';
+      // Normalise HTTP status codes into readable messages, but keep backend
+      // detail for 401 so callers (e.g. AuthContext) can match on "Invalid token".
+      if (response.status === 401 && !errorMessage) errorMessage = '401';
+      else if (response.status === 403 && !errorMessage) errorMessage = '403';
+      else if (response.status === 404 && !errorMessage) errorMessage = '404';
+      else if (response.status === 422 && !errorMessage) errorMessage = '422';
+      else if (response.status === 429 && !errorMessage) errorMessage = '429';
+      else if (response.status >= 500 && !errorMessage) errorMessage = '500';
 
       throw new Error(errorMessage);
     }

@@ -1,18 +1,16 @@
-import os
 import sys
 import time
-from pathlib import Path
-from loguru import logger
-from dotenv import load_dotenv
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+
 from contextlib import asynccontextmanager
 
-# Load environment variables
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from loguru import logger
+
 load_dotenv()
 
-# Configure logging
 logger.remove()
 logger.add(
     sys.stdout,
@@ -21,29 +19,31 @@ logger.add(
 )
 
 from app.core.config import settings
-from app.api.voice import router as voice_router
-from app.api.journalist import router as journalist_router
-from app.api.auth import router as auth_router
-from app.api.user import router as user_router
 from app.core.database import db
+from app.routers import auth_router, users_router, articles_router, voice_router
+
+settings.validate_critical()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(settings.BANNER)
-    logger.info(f"Initializing {settings.APP_NAME}...")
+    logger.info(f"Starting {settings.APP_NAME} [{settings.ENVIRONMENT.upper()}]")
     await db.connect_to_storage()
-    logger.info(f"System Online | {settings.ENVIRONMENT.upper()} | Active: [Journalist, Voice-TTS, DB]")
+    logger.info("Database connected")
     yield
     await db.close_storage_connection()
-    logger.info(f"{settings.APP_NAME} shutting down")
+    logger.info(f"{settings.APP_NAME} stopped")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-# CORS
 origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -55,58 +55,71 @@ app.add_middleware(
     max_age=600,
 )
 
-# ── Simple Rate Limiter ──────────────────────────────────────────────────────
-_rate_mem: dict = {}
+_rate_store: dict = {}
+_RATE_STORE_MAX = 10_000
+
 
 async def _is_rate_limited(key: str) -> bool:
     now = time.monotonic()
-    entry = _rate_mem.get(key)
+    if len(_rate_store) >= _RATE_STORE_MAX:
+        expired = [k for k, (_, ts) in _rate_store.items() if (now - ts) >= settings.RATE_LIMIT_WINDOW]
+        for k in expired:
+            del _rate_store[k]
+    entry = _rate_store.get(key)
     if entry is None or (now - entry[1]) >= settings.RATE_LIMIT_WINDOW:
-        _rate_mem[key] = (1, now)
+        _rate_store[key] = (1, now)
         return False
     count, start = entry
-    count += 1
-    _rate_mem[key] = (count, start)
-    return count > settings.RATE_LIMIT_MAX
+    _rate_store[key] = (count + 1, start)
+    return count + 1 > settings.RATE_LIMIT_MAX
+
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
     if request.method == "POST" and "/api/journalist/generate-content" in request.url.path:
-        user_key = request.query_params.get("email") or request.client.host
-        if await _is_rate_limited(user_key):
+        if await _is_rate_limited(request.client.host):
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Rate limit exceeded."},
+                content={"detail": "Rate limit exceeded"},
                 headers={"Retry-After": str(settings.RATE_LIMIT_WINDOW)},
             )
     return await call_next(request)
 
+
 @app.middleware("http")
-async def latency_logging_middleware(request: Request, call_next):
-    start_time = time.perf_counter()
+async def response_time_middleware(request: Request, call_next):
+    start = time.perf_counter()
     response = await call_next(request)
-    duration = time.perf_counter() - start_time
-    response.headers["X-Response-Time"] = f"{duration:.3f}s"
+    response.headers["X-Response-Time"] = f"{time.perf_counter() - start:.3f}s"
     return response
 
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 @app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error(f"Global exception: {exc}")
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception {request.method} {request.url.path}: {exc}")
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-# Register routers
-app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-app.include_router(user_router, prefix="/api/user", tags=["user"])
-app.include_router(voice_router, prefix="/api/voice")
-app.include_router(journalist_router, prefix="/api")
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "service": settings.APP_NAME}
+app.include_router(auth_router,     prefix="/api/auth",     tags=["auth"])
+app.include_router(users_router,    prefix="/api/user",     tags=["users"])
+app.include_router(articles_router, prefix="/api",          tags=["articles"])
+app.include_router(voice_router,    prefix="/api/voice",    tags=["voice"])
 
-@app.get("/")
+
+@app.get("/health", tags=["system"])
+async def health():
+    return {"status": "ok", "service": settings.APP_NAME, "version": settings.APP_VERSION}
+
+
+@app.get("/", tags=["system"])
 async def root():
-    return {"message": settings.APP_NAME, "version": settings.APP_VERSION}
+    return {"service": settings.APP_NAME, "version": settings.APP_VERSION}
+
 
 if __name__ == "__main__":
     import uvicorn

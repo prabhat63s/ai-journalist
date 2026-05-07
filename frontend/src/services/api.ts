@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export interface User {
   email: string;
@@ -434,7 +434,9 @@ class ApiService {
   }
 
   async getMe(token: string) {
-    return this.request<User>(`/api/auth/me?token=${token}`);
+    return this.request<User>(`/api/auth/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
   }
 
   // Gmail OAuth

@@ -1,109 +1,133 @@
-# 🕵️‍♂️ AI Journalist
+# AI Journalist
 
-> **High-Performance, Stateless Intelligence Engine for Investigative Journalism.**
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?style=for-the-badge&logo=nextdotjs)](https://nextjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb)](https://www.mongodb.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-AI Journalist is a state-of-the-art backend system designed to automate the deep-dive research and writing process for modern investigative journalists. It leverages advanced LLMs (Gemini, Claude, GPT-4o) and specialized TTS (Sarvam Bulbul v3) to transform raw topics into polished, audited reports and audio briefings.
+**AI Journalist** is an end-to-end intelligence engine designed for modern investigative journalism. It automates the heavy lifting of deep-dive research, narrative structuring, and editorial auditing, allowing journalists to focus on high-level analysis and verification.
 
----
-
-## 🚀 Key Features
-
-- **🔍 Multi-Stage Investigative Pipeline**:
-  - **Research**: Real-time web discovery via **SerpAPI** and automated deep-article scraping.
-  - **Structuring**: Intelligent narrative flow design.
-  - **Writing**: High-density reporting using LiteLLM (OpenAI, Anthropic, Mistral, etc.).
-  - **Auditing**: Professional newsroom-style editorial audit.
-- **🎙️ Voice Briefings**: Instant audio news briefings powered by **Sarvam AI Bulbul v3** (en-IN).
-- **🎨 Visual Coverage**: Automated cover image generation using **Gemini Image** or **DALL-E 3**.
-- **📱 Social Distribution Kit**: Automated generation of X threads, LinkedIn posts, and newsletter blurbs.
-- **🌐 Multilingual Support**: On-the-fly translation for global reach.
-- **⚡ Stateless & Minimalist**: Zero Technical Debt. No database requirements. No persistent sessions. Pure API speed.
+By combining live web discovery, multi-model LLM orchestration (Gemini, Claude, GPT-4), and professional-grade TTS, the platform transforms a single prompt into a structured report, audio briefing, and distribution-ready social media kit.
 
 ---
 
-## 🛠️ Technology Stack
+## Core Architecture
 
-- **Core**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+)
-- **Intelligence**: [LiteLLM](https://docs.litellm.ai/) & [Google GenAI](https://ai.google.dev/)
-- **Research**: Google Search Grounding & [SerpAPI](https://serpapi.com/)
-- **Audio**: [Sarvam AI](https://www.sarvam.ai/) (Bulbul v3 TTS)
-- **Validation**: [Pydantic v2](https://docs.pydantic.dev/) & `pydantic-settings`
-- **Images**: [Pillow](https://python-pillow.org/) (Optimization) & Gemini/DALL-E
+The system operates as a **multi-stage investigative pipeline**, ensuring accuracy and depth through sequential processing:
+
+1.  **Discovery**: Real-time research via SerpAPI with automated scraping of top-tier sources.
+2.  **Narrative Design**: Intelligent outlining to ensure logical flow and evidence-based reporting.
+3.  **Content Synthesis**: High-density writing using LiteLLM to leverage the best model for the specific tone/task.
+4.  **Editorial Audit**: A dedicated audit layer that checks for bias, verifies citations, and ensures newsroom standards.
+5.  **Multi-Modal Output**: Instant generation of audio briefings (Sarvam AI) and visual coverage (Gemini/DALL-E).
 
 ---
 
-## 📂 Project Structure
+## Technology Stack
 
-The project follows a clean, production-ready modular architecture:
+| Layer | Technologies |
+| :--- | :--- |
+| **Backend** | FastAPI, Python 3.10+, Pydantic v2, Motor (Async MongoDB) |
+| **Frontend** | Next.js 14+, TypeScript, Tailwind CSS, Framer Motion |
+| **Intelligence** | Google Gemini 1.5 Pro, Anthropic Claude 3.5, OpenAI GPT-4o |
+| **Research** | SerpAPI, BeautifulSoup4, PyPDF |
+| **Audio/Visual** | Sarvam AI (Bulbul v3), Pillow, Imagen/DALL-E 3 |
+
+---
+
+## Project Structure
 
 ```text
-backend/
-├── app/
-│   ├── main.py            # API Entry Point & Middleware
-│   ├── api/               # Route Handlers (Journalist, Voice)
-│   ├── core/              # Centralized Settings (Settings, Banner)
-│   ├── models/            # Pydantic Schemas
-│   └── services/          # Flat Service Layer (Orchestrator, LLM, Gemini)
-├── .env                   # Environment Secrets
-└── requirements.txt       # Optimized Dependencies
+.
+├── backend/                # FastAPI Intelligence Engine
+│   ├── app/
+│   │   ├── api/            # Route handlers (Auth, Journalist, Voice)
+│   │   ├── core/           # Configuration & Database initialization
+│   │   ├── services/       # Business logic (Orchestrator, LLM providers)
+│   │   └── models/         # Pydantic schemas for request/response validation
+│   └── .env                # Backend secrets
+└── frontend/               # Next.js 14 Dashboard
+    ├── src/
+    │   ├── components/     # UI components (Bento grids, Editor, Chat)
+    │   ├── services/       # API client & SSE handling
+    │   └── store/          # State management (Zustand)
+    └── .env.local          # Frontend environment config
 ```
 
 ---
 
-## ⚙️ Getting Started
+## Getting Started
 
 ### 1. Prerequisites
-- Python 3.10 or higher
-- [SerpAPI Key](https://serpapi.com/) (Optional, for advanced web search)
-- [Gemini API Key](https://aistudio.google.com/)
-- [OpenAI API Key](https://platform.openai.com/) (Optional, for fallback writing/images)
-- [Sarvam API Key](https://dashboard.sarvam.ai/) (For Audio Briefings)
 
-### 2. Installation
+- **Python 3.10+** & **Node.js 20+**
+- **MongoDB**: A local instance or [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) URI.
+- **API Keys**: Gemini (Required), SerpAPI (Highly Recommended), Sarvam AI (For Audio).
+
+### 2. Backend Setup
+
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd AI-Journalist/backend
-
-# Create and activate virtual environment
+cd backend
 python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
-```
 
-### 3. Environment Configuration
-Create a `.env` file in the `backend/` root:
-```env
-GEMINI_API_KEY=your_key_here
-OPENAI_API_KEY=your_key_here
-SARVAM_API_KEY=your_key_here
-SERPAPI_API_KEY=your_key_here
-CORS_ORIGINS=http://localhost:3000
-ENVIRONMENT=development
-```
-
-### 4. Running the Server
-```bash
+# Create .env file
+cp .env.example .env # or create manually
 uvicorn app.main:app --reload
 ```
-The API will be available at `http://127.0.0.1:8000` with interactive docs at `/docs`.
+
+### 3. Frontend Setup
+
+```bash
+cd frontend
+npm install
+# Create .env.local with NEXT_PUBLIC_API_URL=http://localhost:8000
+npm run dev
+```
 
 ---
 
-## 📡 API Endpoints
+## Environment Configuration
 
-### Journalist Pipeline
-- `POST /api/journalist/generate-content`: Start the full SSE generation pipeline.
-- `POST /api/journalist/translate`: Translate article content.
-- `POST /api/journalist/generate-image`: Create a cover photo.
-- `POST /api/journalist/generate-social-kit`: Generate distribution assets.
+### Backend (.env)
+| Key | Description |
+| :--- | :--- |
+| `GEMINI_API_KEY` | Primary model for research and reasoning. |
+| `SERPAPI_API_KEY` | Enables real-time Google Search grounding. |
+| `SARVAM_API_KEY` | Required for generating audio news briefings. |
+| `DATABASE_URL` | MongoDB connection string. |
+| `OPENAI_API_KEY` | (Optional) Fallback for writing/image tasks. |
 
-### Voice Services
-- `POST /api/voice/tts`: Direct text-to-speech briefing generation.
+### Frontend (.env.local)
+| Key | Description |
+| :--- | :--- |
+| `NEXT_PUBLIC_API_URL` | Base URL for the FastAPI backend (Default: `http://localhost:8000`). |
 
 ---
 
-## ⚖️ License
-MIT License. Optimized for high-performance AI integration.
+## API Overview
+
+### `POST /api/journalist/generate-content`
+The primary investigative endpoint. Uses **Server-Sent Events (SSE)** to stream the research process, providing real-time feedback as the agent discovers sources, builds the outline, and writes the final report.
+
+### `POST /api/voice/tts`
+Converts investigative reports into high-quality audio briefings optimized for professional news consumption.
+
+---
+
+## Contributing
+
+We welcome contributions from journalists, engineers, and researchers. 
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## License
+
+Distributed under the MIT License. See `LICENSE` for more information.
