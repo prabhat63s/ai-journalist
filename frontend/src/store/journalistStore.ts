@@ -9,6 +9,7 @@ interface JournalistStore {
   activeReportId: number | null;
   activeSessionId: string | null;
   selectedAssistantMsgId: string | null;
+  showEditor: boolean;
   hasLoadedReports: boolean;
 
   // Actions
@@ -18,9 +19,11 @@ interface JournalistStore {
   setActiveReportId: (id: number | null) => void;
   setActiveSessionId: (id: string | null) => void;
   setSelectedAssistantMsgId: (id: string | null) => void;
+  setShowEditor: (show: boolean) => void;
 
   loadSessions: (email: string, force?: boolean) => Promise<void>;
   loadReports: (email: string, force?: boolean) => Promise<void>;
+  deleteSession: (sessionId: string, email: string) => Promise<void>;
   clearSession: () => void;
 }
 
@@ -31,6 +34,7 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
   activeReportId: null,
   activeSessionId: null,
   selectedAssistantMsgId: null,
+  showEditor: true,
   hasLoadedReports: false,
 
   setMessages: (messages) => {
@@ -54,6 +58,7 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
   setActiveReportId: (activeReportId) => set({ activeReportId }),
   setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
   setSelectedAssistantMsgId: (selectedAssistantMsgId) => set({ selectedAssistantMsgId }),
+  setShowEditor: (showEditor) => set({ showEditor }),
 
   loadSessions: async (email, force = false) => {
     if (get().hasLoadedReports && !force) return;
@@ -111,6 +116,24 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
       set({ dbReports: reports, hasLoadedReports: true });
     } catch (err) {
       console.error("Failed to load journalist reports:", err);
+    }
+  },
+
+  deleteSession: async (sessionId, email) => {
+    try {
+      const { deleteSession: deleteSvc } = await import('@/services/journalist.service');
+      await deleteSvc(sessionId, email);
+      
+      set((state) => ({
+        dbSessions: state.dbSessions.filter(s => s.session_id !== sessionId),
+        activeSessionId: state.activeSessionId === sessionId ? null : state.activeSessionId,
+        messages: state.activeSessionId === sessionId ? [] : state.messages,
+        activeReportId: state.activeSessionId === sessionId ? null : state.activeReportId,
+        selectedAssistantMsgId: state.activeSessionId === sessionId ? null : state.selectedAssistantMsgId,
+      }));
+    } catch (err) {
+      console.error("Failed to delete session:", err);
+      throw err;
     }
   },
 

@@ -46,33 +46,4 @@ PERSONA_CONFIGS = {
     }
 }
 
-BRAND_VOICE_CONFIGS = {
-    "The Economist": {
-        "description": "Institutional, global, slightly dry but deeply insightful. Uses 'we' to represent the publication.",
-        "style_instructions": "Use British spelling where appropriate. Maintain a detached, highly intellectual tone. Use words like 'nonetheless', 'moreover', and 'alas'. Focus on macro trends and systemic implications.",
-        "suffix": "Written in the signature style of The Economist."
-    },
-    "Wired": {
-        "description": "Tech-optimistic, futuristic, and deeply analytical about the intersection of technology and culture.",
-        "style_instructions": "Use vibrant, active verbs. Focus on the 'next big thing'. Blend technical deep-dives with cultural impact analysis. Tone should be smart, slightly edgy, and forward-looking.",
-        "suffix": "Written in the signature style of Wired Magazine."
-    },
-    "TechCrunch": {
-        "description": "Fast-paced, insider-y, and focused on startups, venture capital, and market disruption.",
-        "style_instructions": "Focus on 'moats', 'scaling', and 'disruption'. Use short, punchy paragraphs. Lead with the business impact. Tone is savvy and skeptical but excited about innovation.",
-        "suffix": "Written in the signature style of TechCrunch."
-    },
-    "Professional": {
-        "description": "Neutral, corporate, and polished. Ideal for internal reports or B2B whitepapers.",
-        "style_instructions": "Maintain absolute neutrality. Avoid jargon where possible, or define it clearly. Focus on clarity, efficiency, and actionable insights. Tone is helpful and formal.",
-        "suffix": "Written in a high-level Professional Brand Voice."
-    },
-    "Minimalist": {
-        "description": "Strunk & White perfection. Zero fluff. Only the facts that matter.",
-        "style_instructions": "Omit needless words. Use short sentences. Use active voice. No adjectives unless strictly necessary. Focus on the raw truth.",
-        "suffix": "Written in a Minimalist, high-density Brand Voice."
-    }
-}
-
 DEFAULT_PERSONA = "Analytical"
-DEFAULT_BRAND_VOICE = "Professional"

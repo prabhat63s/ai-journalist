@@ -64,6 +64,8 @@ export interface ResearchSummary {
 export interface GroundingSource {
   name: string;
   content: string;
+  previewUrl?: string;
+  type?: string;
 }
 
 export interface AuditReport {

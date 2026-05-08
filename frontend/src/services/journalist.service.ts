@@ -11,7 +11,6 @@ export interface ContentRequest {
   sources: string[];
   grounding_sources: { name: string; content: string }[];
   history: { role: string; content: string }[];
-  brand_voice?: string;
   language?: string;
   report_id?: number;
   session_id?: string;
@@ -245,4 +244,12 @@ export async function deleteConversation(id: string, email: string): Promise<voi
     headers: getAuthHeaders(),
   });
   if (!resp.ok) throw new Error("Failed to delete conversation");
+}
+
+export async function deleteSession(id: string, email: string): Promise<void> {
+  const resp = await fetch(`${API_BASE}/api/journalist/sessions/${id}?email=${encodeURIComponent(email)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  if (!resp.ok) throw new Error(await getErrorMessage(resp, "Failed to delete session"));
 }

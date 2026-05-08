@@ -4,6 +4,15 @@ import { Markdown } from '@tiptap/markdown';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import BubbleMenu from '@tiptap/extension-bubble-menu';
+import TextAlign from '@tiptap/extension-text-align';
+import FontFamily from '@tiptap/extension-font-family';
+import { TextStyle } from '@tiptap/extension-text-style';
+import Underline from '@tiptap/extension-underline';
+import { Color } from '@tiptap/extension-color';
+import { Highlight } from '@tiptap/extension-highlight';
+import { Indent, LineHeight } from './custom-extensions';
+import Superscript from '@tiptap/extension-superscript';
+import Subscript from '@tiptap/extension-subscript';
 
 // Custom Citation Node
 export const Citation = Node.create({
@@ -54,12 +63,8 @@ export const Citation = Node.create({
 export const defaultExtensions = [
   StarterKit.configure({
     // Some StarterKits include a basic link handling, we ensure it doesn't conflict
-    history: true,
   }),
-  Markdown.configure({
-    html: true,
-    tightLists: true,
-  }),
+  Markdown,
   Citation,
   Link.configure({
     openOnClick: false,
@@ -77,4 +82,21 @@ export const defaultExtensions = [
   BubbleMenu.configure({
     element: null, 
   }),
+  TextAlign.configure({
+    types: ['heading', 'paragraph'],
+  }),
+  TextStyle.configure(),
+  FontFamily.configure(),
+  Underline.configure(),
+  Color.configure(),
+  Highlight.configure({ multicolor: true }),
+  Indent,
+  LineHeight,
+  Superscript,
+  Subscript,
 ];
+
+export * from './EditorWorkspace';
+export { default as NewspaperCutout } from './NewspaperCutout';
+export { default as SocialMediaKit } from './SocialMediaKit';
+export { default as SocialMediaCutout } from './SocialMediaCutout';

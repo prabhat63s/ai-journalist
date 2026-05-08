@@ -1,60 +1,46 @@
 "use client";
-
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  Plus,
   Paperclip,
-  Link2,
-  Telescope,
   Mic,
   ArrowRight,
-  Loader2,
-  FileText,
+  Telescope,
+  Link2,
   X,
+  FileText,
+  Plus,
   Square,
-  Languages
+  Loader2,
+  Check
 } from "lucide-react";
-import { PERSONAS, BRAND_VOICES, LANGUAGES } from "@/constants/journalist";
+import { PERSONAS, LANGUAGES } from "@/constants/journalist";
 import { GroundingSource } from "@/types/journalist.types";
 import { uploadFile } from "@/services/journalist.service";
+import { cn } from "@/lib/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import { toast } from "sonner";
 
 interface ISpeechRecognitionEvent {
   results: { length: number;[i: number]: { isFinal: boolean;[j: number]: { transcript: string } } };
 }
-interface ISpeechRecognitionInstance {
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: ISpeechRecognitionEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-type WindowWithSpeech = Window & {
-  SpeechRecognition?: new () => ISpeechRecognitionInstance;
-  webkitSpeechRecognition?: new () => ISpeechRecognitionInstance;
-};
 
 interface ChatInputProps {
   input: string;
-  setInput: React.Dispatch<React.SetStateAction<string>>;
+  setInput: (val: string) => void;
   onSend: () => void;
-  onStop?: () => void;
+  onStop: () => void;
   isLoading: boolean;
   email: string;
-
   sources: string[];
   setSources: React.Dispatch<React.SetStateAction<string[]>>;
   groundingSources: GroundingSource[];
   setGroundingSources: React.Dispatch<React.SetStateAction<GroundingSource[]>>;
-
   persona: string;
-  setPersona: React.Dispatch<React.SetStateAction<string>>;
-  brandVoice: string;
-  setBrandVoice: React.Dispatch<React.SetStateAction<string>>;
+  setPersona: (val: string) => void;
   language: string;
-  setLanguage: React.Dispatch<React.SetStateAction<string>>;
+  setLanguage: (val: string) => void;
   enableWebSearch: boolean;
-  setEnableWebSearch: React.Dispatch<React.SetStateAction<boolean>>;
+  setEnableWebSearch: (val: boolean) => void;
 }
 
 export function ChatInput({
@@ -70,292 +56,311 @@ export function ChatInput({
   setGroundingSources,
   persona,
   setPersona,
-  brandVoice,
-  setBrandVoice,
   language,
   setLanguage,
   enableWebSearch,
-  setEnableWebSearch,
+  setEnableWebSearch
 }: ChatInputProps) {
-  const [isUploading, setIsUploading] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [urlInput, setUrlInput] = useState("");
   const [isListening, setIsListening] = useState(false);
-
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<ISpeechRecognitionInstance | null>(null);
 
-  // Speech recognition init
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const SR = (window as WindowWithSpeech).SpeechRecognition || (window as WindowWithSpeech).webkitSpeechRecognition;
-    if (!SR) return;
-    const rec = new SR();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.onresult = (event: ISpeechRecognitionEvent) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
-      const base = (textareaRef.current?.dataset.baseText) || "";
-      const isFinal = event.results[event.results.length - 1].isFinal;
-      const newText = base.trim() ? `${base.trim()} ${transcript}` : transcript;
-      setInput(newText + (isFinal ? "" : " (listening...)"));
-    };
-    rec.onend = () => {
-      setIsListening(false);
-      setInput(p => p.replace(/\s*\(listening\.\.\.\)$/i, ""));
-    };
-    recognitionRef.current = rec;
-  }, [setInput]);
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) return;
-    if (isListening) {
-      recognitionRef.current.stop();
-    } else {
-      if (textareaRef.current) textareaRef.current.dataset.baseText = input.replace(/\s*\(listening\.\.\.\)$/i, "");
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch { /* ignore */ }
-    }
-  };
-
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
   }, [input]);
 
-  // Close plus menu on outside click
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowPlusMenu(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowPlusMenu(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { alert("File too large (max 10MB)."); return; }
+    if (!file || !email) return;
+
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif'
+    ];
+
+    const isImage = file.type.startsWith('image/');
+    const isDoc = file.type === 'application/pdf' || 
+                  file.type === 'application/msword' || 
+                  file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    if (!isImage && !isDoc) {
+      toast.error("Invalid file type. Please upload a PDF, Word document, or an image.", {
+        description: "Supported: PDF, DOC, DOCX, JPG, PNG, WEBP",
+      });
+      return;
+    }
+
     setIsUploading(true);
     try {
-      const src = await uploadFile(file, email);
-      setGroundingSources(prev => [...prev, src]);
-    } catch {
-      alert("Upload failed. Ensure the backend is running.");
+      const result = await uploadFile(file, email);
+      const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+      
+      setGroundingSources(prev => [...prev, { 
+        name: file.name, 
+        content: result.content,
+        previewUrl,
+        type: file.type
+      }]);
+      
+      toast.success("File uploaded successfully");
+    } catch (error) {
+      console.error("Upload failed", error);
+      toast.error("Upload failed. This file type is not supported or there was a server error.");
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
   const submitUrl = () => {
-    if (!urlInput.trim()) { setShowUrlInput(false); return; }
-    try {
-      new URL(urlInput.trim());
-      if (!sources.includes(urlInput.trim())) setSources(prev => [...prev, urlInput.trim()]);
-      setShowUrlInput(false);
+    if (urlInput.trim()) {
+      setSources(prev => [...prev, urlInput.trim()]);
       setUrlInput("");
-    } catch {
-      alert("Enter a valid URL (e.g. https://example.com)");
+      setShowUrlInput(false);
     }
   };
 
-  return (
-    <div className="shrink-0 p-4 relative z-50">
-      <div className="flex flex-col gap-1 border border-border/40 rounded-2xl bg-surface/40 backdrop-blur-3xl focus-within:border-primary/40 transition-all focus-within:bg-surface/60 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)]">
-        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf,.txt" />
+  const toggleListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event: any) => setInput(input + " " + event.results[0][0].transcript);
+    if (isListening) recognition.stop();
+    else recognition.start();
+  };
 
-        {/* URL input row */}
+  return (
+    <div className="w-full relative p-4 bg-background">
+      <div className="max-w-3xl mx-auto relative bg-surface/50 backdrop-blur-xl border border-border/40 rounded-2xl transition-all focus-within:bg-background focus-within:shadow-[0_8px_30px_rgba(0,0,0,0.04)] focus-within:border-primary/20">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          className="hidden"
+          accept=".pdf,.doc,.docx,image/*"
+        />
+
+        {/* URL Input */}
         {showUrlInput && (
-          <div className="flex items-center gap-2 px-4 pt-3">
-            <div className="flex-1 flex items-center bg-background/30 border border-border/40 rounded-xl px-3 py-2.5 focus-within:border-primary transition-all backdrop-blur-md">
-              <Link2 size={14} className="text-primary opacity-60 mr-2" />
+          <div className="p-3 border-b border-border/40 flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+            <div className="flex-1 flex items-center gap-2 bg-background px-4 py-2 rounded-2xl border border-border/40">
+              <Link2 size={14} className="text-primary" />
               <input
-                autoFocus type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); submitUrl(); } if (e.key === "Escape") setShowUrlInput(false); }}
+                autoFocus value={urlInput} onChange={e => setUrlInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && submitUrl()}
                 placeholder="Paste research URL..."
-                className="flex-1 bg-transparent border-0 outline-none text-[12px] text-foreground placeholder-muted font-semibold"
+                className="flex-1 bg-transparent border-0 outline-none text-[13px] text-foreground"
               />
             </div>
-            <button type="button" onClick={submitUrl} className="px-5 py-2.5 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-95">Add Source</button>
+            <button onClick={submitUrl} className="px-4 py-2 bg-primary text-white rounded-xl text-[11px] font-bold">Add</button>
+            <button onClick={() => setShowUrlInput(false)} className="p-2 text-muted hover:text-foreground"><X size={18} /></button>
           </div>
         )}
 
-        {/* Attached sources */}
+        {/* Sources */}
         {(sources.length > 0 || groundingSources.length > 0 || isUploading) && (
-          <div className="flex flex-wrap gap-2 px-4 pt-3">
+          <div className="flex items-center gap-3 px-5 pt-5 overflow-x-auto no-scrollbar">
             {isUploading && (
-              <div className="flex items-center gap-2 bg-surface/80 border border-border/40 rounded-lg px-3 py-1.5 animate-pulse">
-                <Loader2 size={12} className="text-primary animate-spin" />
-                <span className="text-[9px] font-black uppercase tracking-widest text-muted">Indexing Document...</span>
+              <div className="flex items-center gap-2 bg-background border border-border/40 rounded-xl px-4 py-3 animate-pulse min-w-[140px] justify-center">
+                <Loader2 size={16} className="text-primary animate-spin" />
+                <span className="text-[12px] font-bold text-muted">Indexing...</span>
               </div>
             )}
+            
             {groundingSources.map((src, i) => (
-              <div key={i} className="flex items-center gap-2 bg-success/10 border border-success/20 rounded-xl px-3 py-1.5 shadow-sm group hover:border-success/40 transition-all">
-                <FileText size={12} className="text-success" />
-                <span className="text-[10px] font-bold text-success truncate max-w-[140px]">{src.name}</span>
-                <button onClick={() => setGroundingSources(p => p.filter((_, j) => j !== i))} className="text-success/40 hover:text-success transition-colors"><X size={12} /></button>
+              <div key={i} className="group relative shrink-0">
+                {src.previewUrl ? (
+                  <div className="w-14 h-14 rounded-xl overflow-hidden border border-border/40 bg-surface transition-transform hover:scale-[1.02]">
+                    <img src={src.previewUrl} alt={src.name} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 bg-background border border-border/40 rounded-xl px-4 py-3 transition-all hover:bg-surface/50 max-w-[200px]">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <FileText size={16} className="text-primary" />
+                    </div>
+                    <div className="flex flex-col min-w-0 pr-4">
+                      <span className="text-[12px] font-bold text-foreground truncate">{src.name}</span>
+                      <span className="text-[10px] text-muted font-medium uppercase tracking-wider">{src.type?.split('/')[1] || 'DOC'}</span>
+                    </div>
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => setGroundingSources(p => p.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-foreground text-background rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                >
+                  <X size={12} strokeWidth={3} />
+                </button>
               </div>
             ))}
+
             {sources.map((src, i) => (
-              <div key={i} className="flex items-center gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-1.5 max-w-[90%] shadow-sm group hover:border-primary/40 transition-all">
-                <Link2 size={12} className="text-primary" />
-                <span className="text-[10px] font-bold text-primary truncate max-w-[140px]">{src.replace(/^https?:\/\//, "")}</span>
-                <button onClick={() => setSources(p => p.filter((_, j) => j !== i))} className="text-primary/40 hover:text-primary transition-colors"><X size={12} /></button>
+              <div key={i} className="group relative shrink-0">
+                <div className="flex items-center gap-3 bg-background border border-border/40 rounded-xl px-4 py-3 shadow-sm transition-all hover:bg-surface/50 max-w-[200px]">
+                  <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
+                    <Link2 size={16} className="text-success" />
+                  </div>
+                  <div className="flex flex-col min-w-0 pr-4">
+                    <span className="text-[12px] font-bold text-foreground truncate">{src.replace(/^https?:\/\//, "")}</span>
+                    <span className="text-[10px] text-muted font-medium uppercase tracking-wider">URL</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSources(p => p.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-foreground text-background rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                >
+                  <X size={12} strokeWidth={3} />
+                </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Textarea */}
         <textarea
           ref={textareaRef} value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
           placeholder="What are we investigating today?"
-          className="w-full text-[13px] bg-transparent border-0 resize-none outline-none px-5 pt-5 pb-2 text-foreground placeholder-muted/50 leading-relaxed min-h-[56px] max-h-[160px] overflow-y-auto font-medium"
+          className="w-full text-sm bg-transparent border-0 resize-none outline-none px-6 pt-5 pb-2 text-foreground placeholder-muted leading-relaxed min-h-[60px] max-h-[200px]"
           rows={1} disabled={isLoading || isUploading}
         />
 
-        {/* Bottom bar */}
-        <div className="flex items-center justify-between px-4 pb-4 mt-1">
-          <div className="flex items-center gap-2">
-            <div className="relative" ref={menuRef}>
-              <button type="button" onClick={() => setShowPlusMenu(p => !p)}
-                className={`w-7 h-7 flex items-center justify-center rounded-xl transition-all border ${showPlusMenu ? "bg-foreground border-foreground text-background rotate-45" : "bg-surface/60 text-muted border-border/40 hover:border-primary/40 hover:text-primary shadow-sm active:scale-90"}`}
-              >
-                <Plus size={14} />
-              </button>
-              {showPlusMenu && (
-                <div className="absolute bottom-full left-0 mb-4 w-[330px] bg-background/95 backdrop-blur-2xl border border-border/40 rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden flex flex-col z-100">
-                  <div className="max-h-[70vh] overflow-y-auto custom-scrollbar p-2 flex flex-col gap-1">
-                    <div className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-primary/60 flex items-center justify-between">
-                      <span>Intelligence Settings</span>
-                      <div className="h-px flex-1 bg-primary/10 ml-4" />
-                    </div>
+        {/* Bottom Bar */}
+        <div className="flex items-center justify-between px-3 pb-3">
+          <div className="flex items-center gap-2 flex-1 min-w-0 mr-3">
+            <div className="relative">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className={cn("w-6 h-6 flex items-center justify-center rounded-full transition-all border border-[#ececec] bg-white text-[#666666] hover:text-[#1a1a1a] hover:shadow-sm data-[state=open]:bg-[#f3f3f3] data-[state=open]:text-[#1a1a1a]")}>
+                    <Plus size={16} className="transition-transform duration-200 group-data-[state=open]:rotate-45" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" sideOffset={4} className="w-[280px] bg-background border border-border/40 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.08)] p-1.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-surface transition-colors group cursor-pointer focus:bg-surface">
+                    <Paperclip size={16} className="text-muted-dark group-hover:text-foreground" strokeWidth={1.5} />
+                    <span className="text-[14px] text-foreground/80">Add files or research</span>
+                  </DropdownMenuItem>
 
-                    <div className="grid grid-cols-2 gap-2 p-1.5">
-                      <button type="button" onClick={() => { fileInputRef.current?.click(); setShowPlusMenu(false); }}
-                        className="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface/80 transition-all group bg-surface/30 border border-border/10 hover:border-border/40">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shrink-0"><Paperclip size={18} strokeWidth={2.5} /></div>
-                        <div className="text-left min-w-0"><div className="text-[11px] font-bold text-foreground truncate">Documents</div><div className="text-[9px] text-muted font-medium truncate">PDF/TXT grounding</div></div>
-                      </button>
-                      <button type="button" onClick={() => { setShowUrlInput(p => !p); setShowPlusMenu(false); }}
-                        className="flex items-center gap-3 p-3 rounded-2xl hover:bg-surface/80 transition-all group bg-surface/30 border border-border/10 hover:border-border/40">
-                        <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center text-success group-hover:scale-110 transition-transform shrink-0"><Link2 size={18} strokeWidth={2.5} /></div>
-                        <div className="text-left min-w-0"><div className="text-[11px] font-bold text-foreground truncate">Live URL</div><div className="text-[9px] text-muted font-medium truncate">Instant research</div></div>
-                      </button>
-                    </div>
+                  <DropdownMenuItem onClick={() => setShowUrlInput(true)} className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-surface transition-colors group cursor-pointer focus:bg-surface">
+                    <Link2 size={16} className="text-muted-dark group-hover:text-foreground" strokeWidth={1.5} />
+                    <span className="text-[14px] text-foreground/80">Add research URL</span>
+                  </DropdownMenuItem>
 
-                    <div className="px-1.5">
-                      <button type="button" onClick={() => { setEnableWebSearch(!enableWebSearch); setShowPlusMenu(false); }}
-                        className={`flex items-center justify-between w-full p-3 rounded-2xl transition-all border ${enableWebSearch ? "bg-primary/5 border-primary/20 shadow-sm" : "bg-surface/30 border-border/10 hover:bg-surface/80"}`}>
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${enableWebSearch ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-muted/10 text-muted"}`}><Telescope size={18} strokeWidth={2.5} /></div>
-                          <div className="text-left"><div className="text-[11px] font-bold text-foreground">Web Discovery</div><div className="text-[9px] text-muted font-medium">{enableWebSearch ? "Live Search Active" : "Internal Knowledge Only"}</div></div>
-                        </div>
-                        <div className={`w-9 h-5 rounded-full relative transition-colors ${enableWebSearch ? "bg-primary" : "bg-muted/30"}`}>
-                          <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all shadow-sm ${enableWebSearch ? "right-1" : "left-1"}`} />
-                        </div>
-                      </button>
+                  <DropdownMenuItem onClick={(e) => { e.preventDefault(); setEnableWebSearch(!enableWebSearch); }} className="flex items-center justify-between px-4 py-2.5 rounded-xl hover:bg-surface transition-colors cursor-pointer focus:bg-surface">
+                    <div className="flex items-center gap-3">
+                      <Telescope size={16} className={cn(enableWebSearch ? "text-primary" : "text-muted-dark")} strokeWidth={1.5} />
+                      <span className="text-[14px] text-foreground/80">Web search</span>
                     </div>
+                    {enableWebSearch && <Check size={16} className="text-primary" strokeWidth={3} />}
+                  </DropdownMenuItem>
 
-                    <div className="h-px bg-border/10 my-2 mx-4" />
-                    <div className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-primary/60 flex items-center justify-between">
-                      <span>Newsroom Persona</span>
-                      <div className="h-px flex-1 bg-primary/10 ml-4" />
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-2 gap-2 p-1.5">
+                  <DropdownMenuSeparator className="bg-border/20 my-1 mx-2" />
+
+                  <div className="px-4 py-2.5 flex flex-col gap-2">
+                    <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Persona</span>
+                    <div className="flex gap-1">
                       {PERSONAS.map(p => (
-                        <button key={p.id} type="button" onClick={() => { setPersona(p.id); setShowPlusMenu(false); }}
-                          className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all border ${persona === p.id ? "bg-primary/10 border-primary/40 text-primary shadow-sm" : "bg-surface/30 border-transparent text-muted hover:bg-surface/60 hover:text-foreground"}`}
+                        <button key={p.id} onClick={() => setPersona(p.id)}
+                          className={cn(
+                            "flex-1 flex items-center justify-center p-2 rounded-xl border transition-all",
+                            persona === p.id ? "bg-primary/5 border-primary/20 text-primary" : "bg-transparent border-transparent hover:bg-surface"
+                          )}
                         >
-                          <span className="text-xl group-hover:scale-110 transition-transform">{p.icon}</span>
-                          <span className="text-[9px] font-black uppercase tracking-tighter">{p.id}</span>
+                          <span className="text-lg" title={p.id}>{p.icon}</span>
                         </button>
                       ))}
-                    </div>
-
-                    <div className="h-px bg-border/10 my-2 mx-4" />
-                    <div className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-primary/60 flex items-center justify-between">
-                      <span>Brand Voice</span>
-                      <div className="h-px flex-1 bg-primary/10 ml-4" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 p-1.5">
-                      {BRAND_VOICES.map(bv => (
-                        <button key={bv.id} type="button" onClick={() => { setBrandVoice(bv.id); setShowPlusMenu(false); }}
-                          className={`flex flex-col items-start gap-1 p-3 rounded-2xl text-left transition-all border min-h-[64px] ${brandVoice === bv.id ? "bg-primary/10 border-primary/40 text-primary shadow-sm" : "bg-surface/30 border-transparent text-muted hover:bg-surface/60 hover:text-foreground"}`}
-                        >
-                          <div className="text-[11px] font-black uppercase truncate w-full tracking-tight">{bv.name}</div>
-                          <div className="text-[9px] opacity-70 line-clamp-2 w-full font-medium leading-tight">{bv.description}</div>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="h-px bg-border/10 my-2 mx-4" />
-                    <div className="px-4 py-3 text-[10px] font-black uppercase tracking-[0.25em] text-primary/60 flex items-center justify-between">
-                      <span>Output Language</span>
-                      <div className="h-px flex-1 bg-primary/10 ml-4" />
-                    </div>
-                    <div className="px-1.5 pb-4">
-                      <div className="grid grid-cols-3 gap-2">
-                        {LANGUAGES.map(lang => (
-                          <button key={lang.id} type="button" onClick={() => { setLanguage(lang.id); setShowPlusMenu(false); }}
-                            className={`flex flex-col items-center p-2 rounded-2xl text-[10px] font-bold transition-all border ${language === lang.id ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" : "bg-surface/30 border-transparent text-muted hover:bg-surface/60 hover:text-foreground"}`}
-                          >
-                            <span className="text-lg shrink-0">{lang.flag}</span>
-                            <span className="truncate">{lang.name}</span>
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+
+                  <DropdownMenuSeparator className="bg-border/20 my-1 mx-2" />
+
+                  <div className="px-4 py-2.5 flex flex-col gap-2">
+                    <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Output Language</span>
+                    <div className="grid grid-cols-3 gap-1">
+                      {LANGUAGES.map(lang => (
+                        <button key={lang.id} onClick={() => setLanguage(lang.id)}
+                          className={cn(
+                            "flex flex-col items-center p-1.5 rounded-lg border transition-all",
+                            language === lang.id ? "bg-primary/5 border-primary/20 text-primary" : "bg-transparent border-transparent hover:bg-surface text-muted-dark"
+                          )}
+                        >
+                          <span className="text-sm">{lang.flag}</span>
+                          <span className="text-[8px] font-bold">{lang.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[200px] xs:max-w-[280px] p-0.5">
-              {enableWebSearch && <span className="shrink-0 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary">Deep Research</span>}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-bold text-primary whitespace-nowrap">
-                <span className="opacity-60">{PERSONAS.find(p => p.id === persona)?.icon}</span>
-                {persona}
+            {/* Badges */}
+            <div className="flex items-center overflow-x-auto gap-1.5 no-scrollbar py-0.5">
+              {enableWebSearch && (
+                <div className="flex items-center shrink-0 gap-1 px-3 py-1.5 rounded-full bg-primary/5 text-[10px] font-bold text-primary animate-in zoom-in-95 whitespace-nowrap">
+                  <Telescope size={10} />
+                  <span>Research Active</span>
+                </div>
+              )}
+              <div className="flex items-center shrink-0 gap-1 px-3 py-1.5 rounded-full bg-surface text-[10px] font-bold text-muted-dark whitespace-nowrap">
+                <span>{PERSONAS.find(p => p.id === persona)?.icon}</span>
+                <span>{persona}</span>
               </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] font-bold text-blue-500 whitespace-nowrap">
-                <Languages size={10} className="opacity-60" />
-                {LANGUAGES.find(l => l.id === language)?.name || language}
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 border border-success/20 text-[10px] font-bold text-success whitespace-nowrap">
-                <FileText size={10} className="opacity-60" />
-                {BRAND_VOICES.find(v => v.id === brandVoice)?.name || brandVoice}
+              <div className="flex items-center shrink-0 gap-1 px-3 py-1.5 rounded-full bg-surface text-[10px] font-bold text-muted-dark whitespace-nowrap">
+                <span>{LANGUAGES.find(l => l.id === language)?.flag}</span>
+                <span>{LANGUAGES.find(l => l.id === language)?.name}</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button type="button" onClick={toggleListening}
-              className={`w-7 h-7 flex items-center justify-center border transition-all rounded-xl ${isListening ? "bg-red-500 border-red-500 text-white animate-pulse shadow-lg shadow-red-500/20" : "bg-surface/60 text-muted border-border/40 hover:text-foreground hover:border-border active:scale-90"}`}>
-              <Mic size={14} />
+            <button onClick={toggleListening}
+              className={cn(
+                "w-6 h-6 flex items-center justify-center rounded-full transition-all border border-border/40 bg-background text-muted-dark hover:text-foreground active:scale-95",
+                isListening && "bg-red-500 border-red-500 text-white animate-pulse"
+              )}
+            >
+              <Mic size={14} strokeWidth={1.5} />
             </button>
             {isLoading ? (
-              <button type="button" onClick={onStop}
-                className="w-7 h-7 rounded-xl flex items-center justify-center bg-foreground text-background transition-all hover:scale-105 active:scale-90 shadow-lg shadow-black/10"
-              >
+              <button onClick={onStop} className="w-6 h-6 flex items-center justify-center rounded-full bg-foreground text-background hover:bg-foreground/80 transition-all">
                 <Square size={14} fill="currentColor" />
               </button>
             ) : (
-              <button type="button" onClick={onSend}
+              <button
+                onClick={onSend}
                 disabled={(!input.trim() && sources.length === 0 && groundingSources.length === 0) || isLoading || isUploading}
-                className={`w-7 h-7 rounded-xl flex items-center justify-center border transition-all ${(input.trim() || sources.length > 0 || groundingSources.length > 0) && !isLoading && !isUploading ? "bg-primary text-white shadow-xl shadow-primary/30 border-0" : "bg-surface/40 border-border/40 text-muted opacity-30 cursor-not-allowed"}`}
+                className={cn(
+                  "w-6 h-6 flex items-center justify-center rounded-full transition-all",
+                  (input.trim() || sources.length > 0 || groundingSources.length > 0) && !isLoading && !isUploading
+                    ? "bg-primary text-white shadow-lg shadow-primary/20"
+                    : "bg-surface text-muted opacity-50 cursor-not-allowed"
+                )}
               >
-                <ArrowRight size={14} />
+                <ArrowRight size={16} strokeWidth={2} />
               </button>
             )}
           </div>

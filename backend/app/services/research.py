@@ -13,7 +13,7 @@ from google.genai import types
 from loguru import logger
 from PIL import Image
 
-from app.services.personas import BRAND_VOICE_CONFIGS, DEFAULT_BRAND_VOICE, DEFAULT_PERSONA, PERSONA_CONFIGS
+from app.services.personas import DEFAULT_PERSONA, PERSONA_CONFIGS
 from app.services.prompts import GEMINI_RESEARCH_PROMPT
 
 
@@ -304,7 +304,6 @@ class JournalistResearch:
         grounding_sources: Optional[List[dict]] = None,
         history: Optional[List[dict]] = None,
         llm_svc=None,
-        brand_voice: str = "Professional",
         language: str = "English",
     ) -> dict:
         scrape_client = httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False)
@@ -368,8 +367,6 @@ class JournalistResearch:
             f"Research Focus: {persona_data['style_instructions']}"
         )
 
-        bv = BRAND_VOICE_CONFIGS.get(brand_voice, BRAND_VOICE_CONFIGS[DEFAULT_BRAND_VOICE])
-        prompt += f"\n\nBRAND VOICE: {brand_voice}\nPerspective: {bv['description']}\nStyle: {bv['style_instructions']}"
 
         grounding_candidates: List[Dict[str, str]] = list(serp_results)
 

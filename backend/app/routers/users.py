@@ -14,7 +14,7 @@ _DEFAULT_PREFERENCES = {
     "gmail_connected": False,
     "calendar_connected": False,
     "llm_provider": "gemini",
-    "preferred_model": "gemini-2.0-flash",
+    "preferred_model": "gemini-1.5-flash",
     "is_monitoring": False,
 }
 

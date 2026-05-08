@@ -74,7 +74,6 @@ class JournalistPipeline:
         grounding_sources: Optional[List[Dict[str, str]]] = None,
         history: Optional[List[Dict[str, str]]] = None,
         enable_web_search: bool = True,
-        brand_voice: str = "Professional",
         language: str = "English",
         session_id: Optional[str] = None,
         db: Any = None,
@@ -123,7 +122,6 @@ class JournalistPipeline:
                 grounding_sources=grounding_sources,
                 history=history,
                 llm_svc=llm_svc,
-                brand_voice=brand_voice,
                 language=language,
             )
             logger.info(f"Pipeline: stage 1 (research) {time.perf_counter() - t:.1f}s")
@@ -146,7 +144,6 @@ class JournalistPipeline:
                 research_data=research_data,
                 history=history,
                 expected_word_count=expected_word_count,
-                brand_voice=brand_voice,
                 language=language,
             )
             logger.info(f"Pipeline: stage 2 (outline) {time.perf_counter() - t:.1f}s")
@@ -169,7 +166,6 @@ class JournalistPipeline:
                 persona=persona,
                 history=history,
                 expected_word_count=expected_word_count,
-                brand_voice=brand_voice,
                 language=language,
             ):
                 if request and await request.is_disconnected():
@@ -185,7 +181,7 @@ class JournalistPipeline:
             yield event("status", f"Running editorial audit in {language}...")
             t = time.perf_counter()
             audit_data = await llm_svc.generate_pro_audit(
-                markdown_content, persona, topic, brand_voice=brand_voice, language=language
+                markdown_content, persona, topic, language=language
             )
             logger.info(f"Pipeline: stage 4 (audit) {time.perf_counter() - t:.1f}s")
             logger.info(f"Pipeline: total {time.perf_counter() - pipeline_start:.1f}s")

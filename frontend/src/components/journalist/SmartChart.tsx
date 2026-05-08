@@ -1,13 +1,13 @@
 "use client";
 
 import React from 'react';
-import { 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
   Cell,
   LineChart,
   Line,
@@ -59,10 +59,10 @@ export function SmartChart({ data, title }: SmartChartProps) {
   };
 
   return (
-    <div className="my-10 p-6 rounded-[32px] bg-surface/30 border border-border/40 backdrop-blur-2xl no-print relative overflow-hidden group">
+    <div className="my-10 p-6 rounded-2xl bg-surface/30 border border-border/40 backdrop-blur-2xl no-print relative overflow-hidden group">
       {/* Decorative gradient */}
       <div className="absolute -top-24 -right-24 w-48 h-48 bg-primary/10 blur-[80px] rounded-full pointer-events-none" />
-      
+
       <div className="flex items-center justify-between mb-8 relative z-10">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
@@ -74,9 +74,9 @@ export function SmartChart({ data, title }: SmartChartProps) {
           </div>
         </div>
         <div className="flex gap-1.5">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary/20" />
-            <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-            <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
+          <div className="w-1.5 h-1.5 rounded-full bg-primary/20" />
+          <div className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+          <div className="w-1.5 h-1.5 rounded-full bg-primary/60" />
         </div>
       </div>
 
@@ -84,22 +84,22 @@ export function SmartChart({ data, title }: SmartChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           {chartType === 'bar' ? (
             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <XAxis 
-                dataKey="label" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }} 
+              <XAxis
+                dataKey="label"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }}
                 interval={0}
               />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }} 
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }}
               />
               <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-              <Bar 
-                dataKey="value" 
-                radius={[6, 6, 0, 0]} 
+              <Bar
+                dataKey="value"
+                radius={[6, 6, 0, 0]}
                 animationDuration={2000}
                 barSize={32}
               >
@@ -112,30 +112,30 @@ export function SmartChart({ data, title }: SmartChartProps) {
             <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-              <XAxis 
-                dataKey="label" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }} 
+              <XAxis
+                dataKey="label"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }}
               />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }} 
+              <YAxis
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 9, fontWeight: 700, fill: 'var(--muted)' }}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Area 
-                type="monotone" 
-                dataKey="value" 
-                stroke="var(--primary)" 
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="var(--primary)"
                 strokeWidth={3}
-                fillOpacity={1} 
-                fill="url(#colorValue)" 
+                fillOpacity={1}
+                fill="url(#colorValue)"
                 animationDuration={2500}
               />
             </AreaChart>
@@ -144,11 +144,11 @@ export function SmartChart({ data, title }: SmartChartProps) {
       </div>
 
       <div className="mt-8 flex items-center justify-between border-t border-white/5 pt-4">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">AI Extracted Grounding</span>
-          </div>
-          <span className="text-[10px] font-mono text-muted/40 italic">MightyClaw Intelligence Engine v1.0</span>
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">AI Extracted Grounding</span>
+        </div>
+        <span className="text-[10px] font-mono text-muted/40 italic">MightyClaw Intelligence Engine v1.0</span>
       </div>
     </div>
   );

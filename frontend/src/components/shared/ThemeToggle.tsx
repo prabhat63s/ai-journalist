@@ -15,14 +15,14 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <div className="w-9 h-9 rounded-xl bg-surface/40 border border-border/40" />
+      <div className="w-8 h-8 rounded-xl bg-surface/40 border border-border/40" />
     );
   }
 
   return (
     <button
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="w-9 h-9 flex items-center justify-center rounded-xl bg-surface/40 border border-border/40 text-muted hover:text-foreground transition-all active:scale-95"
+      className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface/40 border border-border/40 text-muted hover:text-foreground transition-all active:scale-95"
       title="Toggle Theme"
     >
       {theme === "dark" ? (

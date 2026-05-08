@@ -31,7 +31,6 @@ class ContentRequest(BaseModel):
     sources: List[str] = Field(default_factory=list)
     grounding_sources: List[Dict[str, str]] = Field(default_factory=list)
     history: List[Dict[str, str]] = Field(default_factory=list)
-    brand_voice: str = Field("Professional")
     language: str = Field("English")
     session_id: Optional[str] = Field(None)
 
@@ -94,7 +93,6 @@ async def generate_content(
             sources=request_body.sources,
             grounding_sources=request_body.grounding_sources,
             history=request_body.history,
-            brand_voice=request_body.brand_voice,
             language=request_body.language,
             session_id=request_body.session_id,
             db=db.db,
@@ -348,3 +346,23 @@ async def delete_conversation(conv_id: str, email: str = Depends(get_current_use
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"status": "success"}
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, email: str = Depends(get_current_user)):
+    logger.info(f"articles: delete session={session_id} user={email}")
+    
+    # Delete all associated reports
+    reports_res = await db.db.reports.delete_many({"session_id": session_id, "user_email": email.lower()})
+    
+    # Delete the conversation
+    conv_res = await db.db.conversations.delete_one({"id": session_id, "user_email": email.lower()})
+    
+    if reports_res.deleted_count == 0 and conv_res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    return {
+        "status": "success", 
+        "reports_deleted": reports_res.deleted_count,
+        "conversation_deleted": conv_res.deleted_count
+    }

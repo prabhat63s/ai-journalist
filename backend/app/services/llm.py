@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 from openai import AsyncOpenAI
 
-from app.services.personas import BRAND_VOICE_CONFIGS, DEFAULT_BRAND_VOICE, DEFAULT_PERSONA, PERSONA_CONFIGS
+from app.services.personas import DEFAULT_PERSONA, PERSONA_CONFIGS
 from app.services.prompts import (
     GPT_OUTLINE_PROMPT_SYSTEM,
     GPT_OUTLINE_PROMPT_USER,
@@ -21,15 +21,53 @@ def _parse_json(text: str) -> dict:
     if not text:
         raise ValueError("Empty response")
 
+    # Clean up markdown code blocks
     text = re.sub(r"```(?:json)?\s*", "", text).strip()
+    text = text.replace("```", "").strip()
 
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
+    # Try to find the first '{' and last '}'
     start = text.find("{")
     if start != -1:
+        # Simple attempt to close truncated JSON
+        candidate = text[start:]
+        
+        # Count braces
+        open_braces = candidate.count("{")
+        close_braces = candidate.count("}")
+        open_brackets = candidate.count("[")
+        close_brackets = candidate.count("]")
+        
+        # If truncated, try to close it
+        if open_braces > close_braces:
+            # This is a very basic fix-up for common truncation
+            if candidate.strip().endswith(",") or candidate.strip().endswith('"'):
+                # Try to close the current string/array/object
+                temp = candidate.strip()
+                if temp.endswith(","): temp = temp[:-1]
+                
+                # Close string if needed (very naive check)
+                if temp.count('"') % 2 != 0:
+                    temp += '"'
+                
+                # Close brackets and braces
+                while open_brackets > close_brackets:
+                    temp += "]"
+                    open_brackets -= 1
+                while open_braces > close_braces:
+                    temp += "}"
+                    open_braces -= 1
+                
+                try:
+                    return json.loads(temp)
+                except:
+                    pass
+
+        # Traditional sliding window search for valid JSON sub-block
         depth = 0
         for i, ch in enumerate(text[start:], start):
             if ch == "{":
@@ -42,14 +80,14 @@ def _parse_json(text: str) -> dict:
                     except json.JSONDecodeError:
                         break
 
-    raise ValueError(f"Could not parse JSON from response: {text[:200]}")
+    raise ValueError(f"Could not parse JSON from response: {text[:500]}...")
 
 
 class JournalistLLM:
     PROVIDER_MODELS = {
         "openai":   ("gpt-4o",                    "gpt-4o-mini"),
         "mistral":  ("mistral-large-latest",       "mistral-small-latest"),
-        "gemini":   ("gemini-2.5-flash",           "gemini-2.5-flash"),
+        "gemini":   ("gemini-1.5-flash",           "gemini-1.5-flash"),
     }
 
     def __init__(self, provider: str, api_key: str):
@@ -93,8 +131,9 @@ class JournalistLLM:
             system_parts = [m["content"] for m in messages if m["role"] == "system"]
             config = types.GenerateContentConfig(
                 response_mime_type="application/json",
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
                 system_instruction="\n".join(system_parts) if system_parts else None,
+                max_output_tokens=2048, # Increased to prevent truncation
+                temperature=0.1,
             )
             resp = await self._genai.aio.models.generate_content(
                 model=f"models/{model}",
@@ -107,6 +146,7 @@ class JournalistLLM:
             model=model,
             messages=messages,
             response_format={"type": "json_object"},
+            max_tokens=2048,
         )
         return _parse_json(resp.choices[0].message.content or "")
 
@@ -123,7 +163,6 @@ class JournalistLLM:
         research_data: dict,
         history: Optional[List[dict]] = None,
         expected_word_count: int = 200,
-        brand_voice: str = "Professional",
         language: str = "English",
     ) -> dict:
         system = GPT_OUTLINE_PROMPT_SYSTEM + self._json_system_suffix()
@@ -137,8 +176,6 @@ class JournalistLLM:
         )
         prompt += f"\n\nOUTPUT LANGUAGE: {language}. All text in the JSON MUST be in {language}."
 
-        bv = BRAND_VOICE_CONFIGS.get(brand_voice, BRAND_VOICE_CONFIGS[DEFAULT_BRAND_VOICE])
-        prompt += f"\n\nBRAND VOICE: {brand_voice}\n{bv['style_instructions']}"
         prompt += f"\n\nLENGTH: Design the outline for approximately {expected_word_count} words."
         prompt += "\n\nReturn your response as a valid JSON object only."
 
@@ -161,7 +198,6 @@ class JournalistLLM:
         persona: str = "Analytical",
         history: Optional[List[dict]] = None,
         expected_word_count: int = 200,
-        brand_voice: str = "Professional",
         language: str = "English",
     ) -> AsyncIterator[str]:
         grounding_context = ""
@@ -206,13 +242,6 @@ class JournalistLLM:
             f"Quote Style: {persona_data.get('quote_style', '')}"
         )
 
-        bv = BRAND_VOICE_CONFIGS.get(brand_voice, BRAND_VOICE_CONFIGS[DEFAULT_BRAND_VOICE])
-        prompt += (
-            f"\n\nBRAND VOICE: {brand_voice}\n"
-            f"Publication Identity: {bv['description']}\n"
-            f"Style Instructions: {bv['style_instructions']}\n"
-            f"Voice Footprint: {bv.get('suffix', '')}"
-        )
 
         prompt += f"\n\nLENGTH: Write approximately {expected_word_count} words."
         prompt += f"\n\nLANGUAGE: Write the entire article in {language}."
@@ -225,7 +254,6 @@ class JournalistLLM:
         if self._genai:
             system_parts = [m["content"] for m in messages if m["role"] == "system"]
             config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
                 system_instruction="\n".join(system_parts) if system_parts else None,
             )
             async for chunk in await self._genai.aio.models.generate_content_stream(
@@ -283,7 +311,6 @@ Return ONLY valid JSON:
         article_content: str,
         persona: str,
         topic: str,
-        brand_voice: str = "Professional",
         language: str = "English",
     ) -> dict:
         system = "You are a perfectionist newsroom editor." + self._json_system_suffix()
@@ -299,7 +326,7 @@ OUTPUT LANGUAGE: {language}. All feedback MUST be in {language}.
 Return ONLY valid JSON:
 {{
   "status": "Passed",
-  "sentiment_tone": "Evaluation of how well the piece matches the {persona} persona and {brand_voice} brand voice.",
+  "sentiment_tone": "Evaluation of how well the piece matches the {persona} persona.",
   "entity_coverage": "Evaluation of stakeholder coverage, citations, and grounding quality.",
   "seo_recommendation": "One specific, actionable SEO keyword or structural recommendation."
 }}"""
@@ -322,7 +349,6 @@ Return ONLY valid JSON:
         if self._genai:
             system_parts = [m["content"] for m in messages if m["role"] == "system"]
             config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
                 system_instruction="\n".join(system_parts) if system_parts else None,
             )
             resp = await self._genai.aio.models.generate_content(
@@ -343,7 +369,6 @@ Return ONLY valid JSON:
         if self._genai:
             system_parts = [m["content"] for m in messages if m["role"] == "system"]
             config = types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
                 system_instruction="\n".join(system_parts) if system_parts else None,
             )
             resp = await self._genai.aio.models.generate_content(

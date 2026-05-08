@@ -3,20 +3,11 @@
 import React, { useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import {
-  Bold,
-  Italic,
-  Heading1,
-  Heading2,
-  List,
-  ListOrdered,
   Copy,
   Check,
   Save,
   Download,
   FileDown,
-  Undo,
-  Redo,
-  Image as ImageIcon,
   Target,
   CheckCircle2,
   BarChart3,
@@ -27,31 +18,31 @@ import {
   AlertCircle,
   TrendingUp,
   Users,
-  Link2,
-  Type,
-  Layout,
-  Quote,
-  Strikethrough,
   ExternalLink,
   Info,
   Newspaper,
   Mic2,
   Activity,
   Loader2,
-  Languages
+  Languages,
+  X,
+  Link2,
+  Image as ImageIcon,
+  Type,
+  Layout,
+  Megaphone,
 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { BubbleMenu as TiptapBubbleMenu } from '@tiptap/react/menus';
 import { AuditReport, SocialKit, ArticleData } from '@/types/journalist.types';
-import { defaultExtensions } from '@/components/editor';
+import { defaultExtensions, EditorWorkspace, NewspaperCutout, SocialMediaKit } from '@/components/editor';
 import { calculateStats, useArticleStats } from '@/hooks/use-article-stats';
 import { handleDownloadImage, handleExportPDF, handleExportWord } from '@/lib/exports';
 import { translateArticle, generateAudioBriefing } from '@/services/journalist.service';
 import { toastSuccess, toastInfo, toastError } from '@/lib/friendly-errors';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LANGUAGES } from '@/constants/journalist';
-import NewspaperCutout from './NewspaperCutout';
 import GeneratedImageCard from './GeneratedImageCard';
-import SocialMediaKit from './SocialMediaKit';
 import { SmartChart } from './SmartChart';
 import { SEOAnalyzer } from './SEOAnalyzer';
 import { AudioBriefingPlayer } from './AudioBriefingPlayer';
@@ -73,7 +64,6 @@ interface ArticleEditorProps {
   isGeneratingSocialKit?: boolean;
   onManualSave?: (content: string) => Promise<void>;
   isSaving?: boolean;
-  brandVoice?: string;
   persona?: string;
   email?: string;
   articleData?: ArticleData | null;
@@ -96,7 +86,6 @@ export default function ArticleEditor({
   isGeneratingSocialKit = false,
   onManualSave,
   isSaving = false,
-  brandVoice = "Professional",
   persona = "Analytical",
   email = "",
   articleData
@@ -177,6 +166,18 @@ export default function ArticleEditor({
   });
 
 
+
+  // Update editor content when content prop changes
+  React.useEffect(() => {
+    if (editor && content !== undefined) {
+      const currentMarkdown = (editor as unknown as { getMarkdown: () => string }).getMarkdown();
+      const newContent = content.split(/#+\s*(?:References|Sources)/i)[0].replace(/^---$/gm, '').trim();
+
+      if (newContent !== currentMarkdown.trim()) {
+        editor.commands.setContent(newContent);
+      }
+    }
+  }, [content, editor]);
 
   const handleCopy = () => {
     if (!editor) return;
@@ -281,121 +282,13 @@ export default function ArticleEditor({
 
   return (
     <div className="flex-1 flex flex-col bg-background overflow-hidden h-full selection:bg-primary/20 selection:text-primary">
-      {/* Premium Toolbar */}
+      {/* Sticky Toolbar */}
       <div className="sticky top-0 z-40 border-b border-border/40 no-print bg-background/90 backdrop-blur-xl">
-        <div className="flex items-center gap-4 px-4 py-2.5 overflow-x-auto no-scrollbar whitespace-nowrap w-full relative">
+        <div className="flex items-center justify-between  gap-4 px-4 py-2.5 overflow-x-auto no-scrollbar whitespace-nowrap w-full relative">
           <div className="flex items-center gap-2">
-            {/* History Group */}
-            <div className="flex items-center bg-surface-hover/40 p-0.5 rounded-lg border border-border/20">
-              <button
-                onClick={() => editor?.chain().focus().undo().run()}
-                disabled={!canUndo}
-                className="p-1.5 rounded-md hover:bg-surface transition-all disabled:opacity-20 text-muted-dark hover:text-foreground"
-                title="Undo"
-              >
-                <Undo size={15} />
-              </button>
-              <button
-                onClick={() => editor?.chain().focus().redo().run()}
-                disabled={!canRedo}
-                className="p-1.5 rounded-md hover:bg-surface transition-all disabled:opacity-20 text-muted-dark hover:text-foreground"
-                title="Redo"
-              >
-                <Redo size={15} />
-              </button>
-            </div>
-
-            {/* Text Style Group */}
-            <div className="flex items-center bg-surface-hover/40 p-0.5 rounded-lg border border-border/20">
-              <button
-                onClick={() => editor?.chain().focus().toggleBold().run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('bold') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Bold"
-              >
-                <Bold size={15} />
-              </button>
-              <button
-                onClick={() => editor?.chain().focus().toggleItalic().run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('italic') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Italic"
-              >
-                <Italic size={15} />
-              </button>
-              <button
-                onClick={() => editor?.chain().focus().toggleStrike().run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('strike') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Strikethrough"
-              >
-                <Strikethrough size={15} />
-              </button>
-            </div>
-
-            {/* Headings */}
-            <div className="flex items-center bg-surface-hover/40 p-0.5 rounded-lg border border-border/20">
-              <button
-                onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('heading', { level: 1 }) ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Heading 1"
-              >
-                <Heading1 size={15} />
-              </button>
-              <button
-                onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('heading', { level: 2 }) ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Heading 2"
-              >
-                <Heading2 size={15} />
-              </button>
-            </div>
-
-            {/* Lists & Quotes */}
-            <div className="flex items-center bg-surface-hover/40 p-0.5 rounded-lg border border-border/20">
-              <button
-                onClick={() => editor?.chain().focus().toggleBulletList().run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('bulletList') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Bullet List"
-              >
-                <List size={15} />
-              </button>
-              <button
-                onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('orderedList') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Ordered List"
-              >
-                <ListOrdered size={15} />
-              </button>
-              <button
-                onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('blockquote') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Blockquote"
-              >
-                <Quote size={15} />
-              </button>
-            </div>
-
-            {/* Insert Items */}
-            <div className="flex items-center bg-surface-hover/40 p-0.5 rounded-lg border border-border/20">
-              <button
-                onClick={setLink}
-                className={`p-2 rounded-md transition-all ${editor?.isActive('link') ? 'text-primary bg-primary/10 shadow-inner' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Add Link"
-              >
-                <Link2 size={15} />
-              </button>
-              <button
-                onClick={() => insertImage()}
-                className="p-2 rounded-md text-muted-dark hover:bg-surface hover:text-foreground transition-all"
-                title="Insert Image"
-              >
-                <ImageIcon size={15} />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
             {/* Stats Badge */}
             {stats && (
-              <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 rounded-lg bg-surface/50 border border-border/40 text-[10px] font-bold tracking-tight">
+              <div className="hidden lg:flex items-center gap-3 px-3 py-2 rounded-lg bg-surface/50 border border-border/40 text-[10px] font-bold tracking-tight">
                 <div className="flex items-center gap-1.5 text-muted-dark">
                   <Type size={12} className="text-primary/60" />
                   <span>{stats.words} WORDS</span>
@@ -410,13 +303,9 @@ export default function ArticleEditor({
 
             {/* Persona & Brand Voice Badges */}
             <div className="hidden sm:flex items-center gap-2">
-              <div className="px-2.5 py-1.5 rounded-lg bg-surface-hover border border-border/40 text-[9px] font-bold uppercase tracking-[0.15em] text-primary flex items-center gap-2 shadow-sm">
+              <div className="px-2.5 py-2 rounded-lg bg-surface-hover border border-border/40 text-[9px] font-bold uppercase tracking-[0.15em] text-primary flex items-center gap-2">
                 <div className="w-1 h-1 rounded-full bg-primary" />
                 {persona}
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-surface-hover border border-border/40 text-[9px] font-bold uppercase tracking-[0.15em] text-success flex items-center gap-2 shadow-sm">
-                <div className="w-1 h-1 rounded-full bg-success" />
-                {brandVoice}
               </div>
             </div>
           </div>
@@ -428,6 +317,13 @@ export default function ArticleEditor({
               title={viewMode === 'newspaper' ? 'Back to Editor' : 'Newspaper View'}
             >
               <Newspaper size={15} />
+            </button>
+            <button
+              onClick={() => setViewMode(v => v === 'social' ? 'editor' : 'social')}
+              className={`p-2 rounded-md transition-all ${viewMode === 'social' ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+              title={viewMode === 'social' ? 'Back to Editor' : 'Social Media Kit'}
+            >
+              <Megaphone size={15} />
             </button>
             <button
               onClick={() => setShowSEO(p => !p)}
@@ -444,7 +340,7 @@ export default function ArticleEditor({
             >
               {isGeneratingAudio ? <Loader2 size={15} className="animate-spin" /> : <Mic2 size={15} />}
             </button>
-            <div className="w-[1px] h-4 bg-border/40 mx-1" />
+            <div className="w-px h-4 bg-border/40 mx-1" />
 
             <button
               onClick={openLanguageModal}
@@ -453,7 +349,7 @@ export default function ArticleEditor({
             >
               <Languages size={15} />
             </button>
-            <div className="w-[1px] h-4 bg-border/40 mx-1" />
+            <div className="w-px h-4 bg-border/40 mx-1" />
             <button
               onClick={handleCopy}
               title="Copy as plain text"
@@ -518,61 +414,28 @@ export default function ArticleEditor({
       </div>
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Tiptap Bubble Menu */}
-        {editor && (
-          <TiptapBubbleMenu
-            editor={editor}
-            options={{
-              placement: 'top',
-            }}
-            className="flex items-center gap-1 bg-background shadow-2xl border border-border/80 p-1 rounded-xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-200"
-          >
-            <button
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-1.5 rounded-lg transition-colors ${editor.isActive('bold') ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface'}`}
-            >
-              <Bold size={14} />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-1.5 rounded-lg transition-colors ${editor.isActive('italic') ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface'}`}
-            >
-              <Italic size={14} />
-            </button>
-            <div className="w-px h-4 bg-border/60 mx-1" />
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`p-1.5 rounded-lg transition-colors ${editor.isActive('heading', { level: 2 }) ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface'}`}
-            >
-              <Heading2 size={14} />
-            </button>
-            <button
-              onClick={setLink}
-              className={`p-1.5 rounded-lg transition-colors ${editor.isActive('link') ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface'}`}
-            >
-              <Link2 size={14} />
-            </button>
-          </TiptapBubbleMenu>
-        )}
+        <EditorWorkspace
+          editor={editor}
+          viewMode={viewMode}
+          title={title}
+          content={content}
+          imageUrl={imageUrl || ""}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          setLink={setLink}
+          insertImage={insertImage}
+          socialKit={socialKit}
+          onCopySocial={handleCopySocialContent}
+          onRegenerateSocial={(options) => onGenerateSocialKit && onGenerateSocialKit(content, articleData?.id, options)}
+          isGeneratingSocial={isGeneratingSocialKit}
+        />
 
-        {/* Editor Area with Refined Aesthetics */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar bg-surface/10">
-          <div className="w-full p-4 space-y-8">
-            {viewMode === 'newspaper' ? (
-              <NewspaperCutout
-                title={title}
-                content={content}
-                imageUrl={imageUrl}
-              />
-            ) : (
-              <div className="paper-sheet prose-premium relative p-4 h-auto">
-                <EditorContent editor={editor} />
-              </div>
-            )}
-
+        {/* Right Sidebar: Research & Editorial Intelligence */}
+        <div className="hidden lg:block w-[400px] shrink-0 h-full border-l border-border/40 bg-surface/10 overflow-y-auto no-scrollbar">
+          <div className="p-6">
             {/* top keywords stats */}
             {stats && stats.keywords.length > 0 && (
-              <div className="mt-8 mb-4 space-y-3">
+              <div className="mb-8 space-y-3">
                 <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Top Keywords</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {stats.keywords.map(([key, count], i) => (
@@ -597,30 +460,14 @@ export default function ArticleEditor({
               />
             )}
 
-            {/* Social Media Kit */}
-            {socialKit && (
-              <SocialMediaKit
-                data={[
-                  { platform: 'X', content: socialKit.twitter_thread ? (Array.isArray(socialKit.twitter_thread) ? socialKit.twitter_thread.join('\n\n') : socialKit.twitter_thread) : "", tags: socialKit.twitter_tags || ['Content', 'AI'], charLimit: 280 },
-                  { platform: 'LinkedIn', content: socialKit.linkedin_post || "", tags: socialKit.linkedin_tags || ['Professional', 'Update'], charLimit: 3000 },
-                  { platform: 'Instagram', content: socialKit.instagram_caption || "", tags: socialKit.instagram_tags || ['Visual', 'Narrative'], charLimit: 2200 },
-                  { platform: 'Facebook', content: socialKit.facebook_post || "", tags: socialKit.facebook_tags || ['Social', 'Community'], charLimit: 5000 },
-                  { platform: 'Newsletter', content: socialKit.newsletter_blurb || "", tags: socialKit.newsletter_tags || ['Newsletter', 'Digest'], charLimit: 1000 }
-                ]}
-                onCopy={(platform, content) => handleCopySocialContent(platform, content)}
-                onRegenerate={(options) => onGenerateSocialKit && onGenerateSocialKit(content, articleData?.id, options)}
-                isGenerating={isGeneratingSocialKit}
-                imageUrl={imageUrl}
-              />
-            )}
             {/* Editorial Intelligence Dashboard (Tabs: Insights, Audit, Sources) */}
             <div className="space-y-6 my-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex items-center gap-3">
-                <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
                 <div className="px-4 py-1.5 rounded-full border border-border bg-surface/50 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
                   Editorial Intelligence
                 </div>
-                <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
+                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
               </div>
 
               {/* Tab Navigation */}
@@ -666,7 +513,7 @@ export default function ArticleEditor({
                 {/* Audit Tab */}
                 {activeEditorialTab === 'audit' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <div className={`p-5 rounded-3xl bg-surface/30 border border-border/60 no-print transition-all duration-500 ${!audit ? 'opacity-50 grayscale' : 'opacity-100'}`}>
+                    <div className={`p-5 rounded-2xl bg-surface/30 border border-border/60 no-print transition-all duration-500 ${!audit ? 'opacity-50 grayscale' : 'opacity-100'}`}>
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2">
                           <AlertCircle size={18} className="text-primary" />
@@ -681,7 +528,7 @@ export default function ArticleEditor({
                         )}
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col h-[200px] overflow-y-auto gap-4">
                         <div className="p-3 rounded-xl bg-background/50 border border-border/40">
                           <div className="flex items-center gap-2 mb-2">
                             <TrendingUp size={14} className="text-primary" />
@@ -700,16 +547,15 @@ export default function ArticleEditor({
                             {audit?.entity_coverage || "Analyzing stakeholder coverage and grounding citations quality..."}
                           </p>
                         </div>
-                      </div>
-
-                      <div className="mt-4 p-3 rounded-xl bg-background border border-border/40">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Target size={14} className="text-primary" />
-                          <span className="text-[11px] font-bold text-primary">SEO Recommendation</span>
+                        <div className="mt-4 p-3 rounded-xl bg-background border border-border/40">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Target size={14} className="text-primary" />
+                            <span className="text-[11px] font-bold text-primary">SEO Recommendation</span>
+                          </div>
+                          <p className="text-[11px] text-muted-dark italic">
+                            {audit?.seo_recommendation || `Optimizing semantic relevance for "${title}"...`}
+                          </p>
                         </div>
-                        <p className="text-[11px] text-muted-dark italic">
-                          {audit?.seo_recommendation || `Optimizing semantic relevance for "${title}"...`}
-                        </p>
                       </div>
                     </div>
                   </div>
@@ -732,12 +578,12 @@ export default function ArticleEditor({
                       );
                       const uniqueSources = normalizedSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
                       return uniqueSources.length > 0 ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-6 flex items-center gap-2">
-                            <div className="w-8 h-[1px] bg-primary/30"></div>
+                            <div className="w-8 h-1px bg-primary/30"></div>
                             Verified Sources & References
                           </div>
-                          <div className="grid grid-cols-1 gap-x-12 gap-y-2">
+                          <div className="grid grid-cols-1 h-[200px] overflow-y-auto gap-x-12 gap-y-2">
                             {uniqueSources.map((source, i) => (
                               <div key={i} className="group flex gap-4">
                                 <div className="flex flex-col items-center gap-2">
@@ -813,7 +659,7 @@ export default function ArticleEditor({
                   {activeTab === 'facts' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                       {(articleData.research_summary.core_facts?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-success/10 flex items-center justify-center text-success">
                               <CheckCircle2 size={20} />
@@ -823,7 +669,7 @@ export default function ArticleEditor({
                               <p className="text-[11px] text-muted">Primary verified data points discovered.</p>
                             </div>
                           </div>
-                          <ul className="">
+                          <ul className="max-h-[300px] overflow-y-auto">
                             {articleData.research_summary.core_facts?.map((fact, i) => (
                               <li key={i} className="text-[13px] text-muted-dark leading-relaxed flex items-start gap-3 p-2 rounded-2xl hover:bg-background/40 transition-colors">
                                 <span className="w-2 h-2 rounded-full bg-success/40 mt-1.5 shrink-0" />
@@ -842,7 +688,7 @@ export default function ArticleEditor({
                   {activeTab === 'stats' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                       {(articleData.research_summary.statistics?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                               <BarChart3 size={20} />
@@ -852,7 +698,7 @@ export default function ArticleEditor({
                               <p className="text-[11px] text-muted">Quantitative metrics and hard evidence.</p>
                             </div>
                           </div>
-                          <div className="grid grid-cols-1 gap-2">
+                          <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
                             {articleData.research_summary.statistics?.map((stat, i) => (
                               <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 text-[13px] text-primary font-medium hover:scale-[1.01] transition-transform">
                                 <span className="text-[10px] uppercase font-bold text-muted/60 block mb-1">Evidence Point {i + 1}</span>
@@ -871,7 +717,7 @@ export default function ArticleEditor({
                   {activeTab === 'trends' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                       {(articleData.research_summary.trends?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-warning/10 flex items-center justify-center text-warning">
                               <Zap size={20} />
@@ -881,7 +727,7 @@ export default function ArticleEditor({
                               <p className="text-[11px] text-muted">Future directions and market shifts discovered.</p>
                             </div>
                           </div>
-                          <div className="flex flex-wrap gap-3">
+                          <div className="flex max-h-[300px] overflow-y-auto flex-wrap gap-3">
                             {articleData.research_summary.trends?.map((trend, i) => (
                               <span key={i} className="px-5 py-3 rounded-2xl bg-warning/5 border border-warning/10 text-[12px] font-bold text-warning-dark hover:bg-warning/10 transition-colors">
                                 {typeof trend === 'string' ? trend : JSON.stringify(trend)}
@@ -899,7 +745,7 @@ export default function ArticleEditor({
                   {activeTab === 'perspectives' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                       {((articleData.research_summary.hidden_challenges?.length || 0) > 0 || (articleData.research_summary.contrarian_perspectives?.length || 0) > 0) ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive">
                               <ShieldAlert size={20} />
@@ -909,7 +755,7 @@ export default function ArticleEditor({
                               <p className="text-[11px] text-muted">Bottlenecks, challenges, and alternative theories.</p>
                             </div>
                           </div>
-                          <div className="space-y-4">
+                          <div className="space-y-4 max-h-[300px] overflow-y-auto">
                             {articleData.research_summary.hidden_challenges?.map((challenge, i) => (
                               <div key={i} className="text-[13px] text-muted-dark border-l-4 border-destructive/20 pl-5 py-2 italic bg-destructive/5 rounded-r-2xl">
                                 <span className="font-bold text-[10px] uppercase text-destructive/60 block mb-1">Hidden Challenge</span>
@@ -934,7 +780,7 @@ export default function ArticleEditor({
                   {activeTab === 'stakeholders' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                       {(articleData.research_summary.stakeholders?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
                               <Users2 size={20} />
@@ -944,7 +790,7 @@ export default function ArticleEditor({
                               <p className="text-[11px] text-muted">Key players and their economic incentives.</p>
                             </div>
                           </div>
-                          <div className="grid grid-cols-1 gap-3">
+                          <div className="grid grid-cols-1 max-h-[300px] overflow-y-auto gap-3">
                             {articleData.research_summary.stakeholders?.map((stakeholder, i) => {
                               if (typeof stakeholder === 'string') {
                                 return (
@@ -984,7 +830,7 @@ export default function ArticleEditor({
                   {activeTab === 'examples' && (
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                       {(articleData.research_summary.examples?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-3xl bg-surface/30 border border-border/60">
+                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
                           <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 rounded-2xl bg-success/10 flex items-center justify-center text-success">
                               <Lightbulb size={20} />
@@ -1019,7 +865,7 @@ export default function ArticleEditor({
                               <p className="text-[11px] text-muted">Real-world case studies and success stories.</p>
                             </div>
                           </div>
-                          <div className="space-y-3">
+                          <div className="space-y-3 max-h-[300px] overflow-y-auto">
                             {articleData.research_summary.examples?.map((example, i) => {
                               const isObject = typeof example === 'object' && example !== null;
                               const type = isObject ? (example as Record<string, unknown>).type as string : 'Case Study';
@@ -1162,7 +1008,6 @@ export default function ArticleEditor({
           </div>
         </div>
       )}
-
     </div>
   );
 }

@@ -42,7 +42,7 @@ export default function GeneratedImageCard({
       
       <div className="border-thin rounded-lg overflow-hidden bg-surface">
         {/* Image Canvas */}
-        <div className="relative h-[400px] md:h-[700px] bg-[#0d0d1a] flex items-center justify-center overflow-hidden">
+        <div className="relative w-full aspect-square bg-[#0d0d1a] flex items-center justify-center overflow-hidden">
           {isGenerating ? (
             <div className="flex flex-col items-center gap-3">
               <RefreshCw size={24} className="text-primary animate-spin" />
@@ -54,7 +54,7 @@ export default function GeneratedImageCard({
               alt="Generated article cover" 
               fill
               unoptimized
-              className="object-cover h-full opacity-90 hover:opacity-100 transition-opacity"
+              className="object-cover opacity-90 hover:opacity-100 transition-opacity"
             />
           ) : (
             <div className="flex flex-col items-center gap-3">
@@ -94,37 +94,37 @@ export default function GeneratedImageCard({
               </div>
             </div>
           ) : (
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-              <div className="flex-1 text-[12px] text-muted-dark leading-relaxed">
-                <span className="text-muted font-medium">Prompt: </span>
+            <div className="flex flex-col gap-3">
+              <div className="text-[11px] text-muted-dark leading-relaxed bg-surface/50 p-2 rounded-md border border-border/20">
+                <span className="text-muted font-bold uppercase tracking-tight text-[9px] block mb-0.5">Prompt</span>
                 {prompt || "No prompt provided."}
               </div>
               
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <button 
                   onClick={onRegenerate}
                   disabled={isGenerating}
-                  className="px-3 py-1.5 border-thin rounded-lg text-[11px] font-medium text-muted-dark hover:bg-surface transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 min-w-[100px] px-3 py-1.5 border-thin rounded-lg text-[10px] font-bold uppercase tracking-wider text-muted-dark hover:bg-surface hover:text-primary transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RefreshCw size={12} className={isGenerating ? "animate-spin" : ""} />
-                  {isGenerating ? "Regenerating..." : "Regenerate"}
+                  {isGenerating ? "Wait..." : "Regenerate"}
                 </button>
                 <button 
                   onClick={handleEditClick}
                   disabled={isGenerating}
-                  className="px-3 py-1.5 border-thin rounded-lg text-[11px] font-medium text-muted-dark hover:bg-surface transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 min-w-[100px] px-3 py-1.5 border-thin rounded-lg text-[10px] font-bold uppercase tracking-wider text-muted-dark hover:bg-surface hover:text-primary transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Edit3 size={12} />
-                  Edit prompt
+                  Edit
                 </button>
                 {imageUrl && (
                   <button
                     onClick={onDownload}
                     disabled={isGenerating}
-                    className="px-3 py-1.5 border-thin rounded-lg text-[11px] font-medium text-muted-dark hover:bg-surface transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 min-w-[100px] px-3 py-1.5 border-thin rounded-lg text-[10px] font-bold uppercase tracking-wider text-muted-dark hover:bg-surface hover:text-primary transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Download size={12} />
-                    Download
+                    Get Image
                   </button>
                 )}
               </div>

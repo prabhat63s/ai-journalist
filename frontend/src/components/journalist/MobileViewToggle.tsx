@@ -3,7 +3,7 @@
 import React from "react";
 import { ChevronLeft, History, Plus } from "lucide-react";
 import Link from "next/link";
-import { ThemeToggle } from "./ThemeToggle";
+import { ThemeToggle } from "../shared/ThemeToggle";
 
 interface MobileViewToggleProps {
   view: "chat" | "editor";
@@ -17,18 +17,16 @@ export function MobileViewToggle({ view, setView, onNewChat, onHistoryOpen }: Mo
     <div className="md:hidden w-full flex items-center justify-between border-b border-border/10 bg-background/80 backdrop-blur-xl px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-3 gap-4">
       {/* Premium Toggle */}
       <div className="relative flex bg-surface-hover/50 p-1 rounded-2xl flex-1 max-w-[180px] items-center border border-border/40 overflow-hidden shadow-inner">
-        <div 
-          className={`absolute top-1 bottom-1 w-[calc(50%-2px)] bg-primary rounded-xl transition-all duration-500 ease-[cubic-bezier(0.2,1,0.3,1)] shadow-lg shadow-primary/25 ${
-            view === "chat" ? "left-1" : "left-[calc(50%+1px)]"
-          }`} 
+        <div
+          className={`absolute top-1 bottom-1 w-[calc(50%-2px)] bg-primary rounded-xl transition-all duration-500 ease-[cubic-bezier(0.2,1,0.3,1)] shadow-lg shadow-primary/25 ${view === "chat" ? "left-1" : "left-[calc(50%+1px)]"
+            }`}
         />
         {(["chat", "editor"] as const).map((v) => (
-          <button 
-            key={v} 
-            onClick={() => setView(v)} 
-            className={`relative z-10 flex-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-300 ${
-              view === v ? "text-white" : "text-muted hover:text-foreground"
-            }`}
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`relative z-10 flex-1 py-1.5 text-[10px] font-bold uppercase tracking-[0.1em] transition-colors duration-300 ${view === v ? "text-white" : "text-muted hover:text-foreground"
+              }`}
           >
             {v}
           </button>
