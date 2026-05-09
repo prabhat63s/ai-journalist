@@ -368,7 +368,7 @@ export default function ArticleEditor({
 
           {/* Right: Actions & Tools Grouped */}
           <div className="flex items-center gap-2 py-1">
-            {/* View Mode Toggle */}
+            {/* View Mode & Generation */}
             <div className="flex items-center gap-1 px-1">
               <button
                 onClick={() => setViewMode(v => v === 'editor' ? 'newspaper' : 'editor')}
@@ -378,11 +378,30 @@ export default function ArticleEditor({
                 <Newspaper size={16} />
               </button>
               <button
-                onClick={() => setViewMode(v => v === 'social' ? 'editor' : 'social')}
+                onClick={() => {
+                  if (articleData && !socialKit) {
+                    onGenerateSocialKit?.(content, articleData.id);
+                  } else {
+                    setViewMode(v => v === 'social' ? 'editor' : 'social');
+                  }
+                }}
+                disabled={isGeneratingSocialKit}
                 className={`p-2 rounded-lg transition-all active:scale-90 ${viewMode === 'social' ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-                title="Social Media Kit"
+                title={socialKit ? "Toggle Social Media Kit" : "Generate Social Kit"}
               >
-                <Megaphone size={16} />
+                {isGeneratingSocialKit ? <Loader2 size={16} className="animate-spin" /> : <Megaphone size={16} />}
+              </button>
+              <button
+                onClick={() => {
+                  if (articleData && !imageUrl) {
+                    onGenerateImage?.(articleData.topic, articleData.category || "General", articleData.markdown_content, articleData.id);
+                  }
+                }}
+                disabled={isGeneratingImage || !!imageUrl}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${imageUrl ? 'text-primary bg-primary/10 opacity-50 cursor-not-allowed' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title={imageUrl ? "Image Generated" : "Generate Image"}
+              >
+                {isGeneratingImage ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
               </button>
             </div>
 
@@ -593,7 +612,7 @@ export default function ArticleEditor({
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
                         <AlertCircle size={18} className="text-primary" />
-                        <h3 className="text-sm font-bold text-foreground">Journalist Pro Audit</h3>
+                        <h3 className="text-sm font-bold text-foreground">Slate Pro Audit</h3>
                       </div>
                       {audit ? (
                         <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${audit.status === 'Passed' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>

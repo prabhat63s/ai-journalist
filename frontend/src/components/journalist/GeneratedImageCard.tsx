@@ -42,7 +42,7 @@ export default function GeneratedImageCard({
       
       <div className="border-thin rounded-lg overflow-hidden bg-surface">
         {/* Image Canvas */}
-        <div className="relative w-full aspect-square bg-[#0d0d1a] flex items-center justify-center overflow-hidden">
+        <div className="relative w-full min-h-[200px] aspect-video bg-[#0d0d1a] flex items-center justify-center overflow-hidden">
           {isGenerating ? (
             <div className="flex flex-col items-center gap-3">
               <RefreshCw size={24} className="text-primary animate-spin" />

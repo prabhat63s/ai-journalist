@@ -147,7 +147,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
       <div className={cn("flex flex-col h-full", isOpen ? "w-[260px]" : "w-[50px]")}>
         {/* Top Header */}
         <div className={cn("p-2 flex items-center justify-between", !isOpen && "justify-center px-0")}>
-          {isOpen && <h1 className="text-[22px] font-semibold text-foreground font-serif tracking-tight ml-2">AI Journalist</h1>}
+          {isOpen && <h1 className="text-[22px] font-semibold text-foreground font-serif tracking-tight ml-2">Slate</h1>}
           <button 
             onClick={onToggle}
             className={cn("text-muted-dark hover:text-foreground p-2 rounded-md hover:bg-surface transition-colors", !isOpen && "mx-auto")}

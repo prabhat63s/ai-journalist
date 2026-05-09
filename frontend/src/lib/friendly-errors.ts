@@ -96,7 +96,7 @@ const CONTEXT_PREFIXES: Record<string, string> = {
   load_contacts: "Couldn't load contacts.",
   create_event: "Couldn't create the calendar event.",
   load_events: "Couldn't load calendar events.",
-  generate_content: "The content writer ran into a problem.",
+  generate_content: "The Slate ran into a problem.",
   generate_image: "Couldn't generate the cover image.",
   generate_social: "Couldn't generate the social kit.",
   upload_file: "File upload failed.",

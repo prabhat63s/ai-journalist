@@ -573,7 +573,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               )}
               {/* Generated Image Card */}
               {imageUrl ? (
-                <div className="flex-1">
+                <div className="flex-1 mt-8 max-w-2xl mx-auto">
                   <GeneratedImageCard
                     imageUrl={imageUrl}
                     prompt={imagePrompt}

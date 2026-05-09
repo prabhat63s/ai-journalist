@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 _DEFAULT_JWT = "your-super-secret-key-change-me-in-production"
 
 class Settings(BaseSettings):
-    APP_NAME: str = "AI Journalist API"
+    APP_NAME: str = "Slate API"
     APP_VERSION: str = "1.0.0"
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
@@ -17,13 +17,13 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", _DEFAULT_JWT)
 
     BANNER: str = """
- █████╗ ██╗     ██╗ ██████╗ ██╗   ██╗██████╗ ███╗   ██╗ █████╗ ██╗     ██╗███████╗████████╗
-██╔══██╗██║     ██║██╔═══██╗██║   ██║██╔══██╗████╗  ██║██╔══██╗██║     ██║██╔════╝╚══██╔══╝
-███████║██║     ██║██║   ██║██║   ██║██████╔╝██╔██╗ ██║███████║██║     ██║███████╗   ██║
-██╔══██║██║     ██║██║   ██║██║   ██║██╔══██╗██║╚██╗██║██╔══██║██║     ██║╚════██║   ██║
-██║  ██║██║     ██║╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║██║  ██║███████╗██║███████║   ██║
-╚═╝  ╚═╝╚═╝     ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝╚═╝╚══════╝   ╚═╝
-                                     AI Journalist Backend
+ ██████╗ ██╗      █████╗ ████████╗███████╗
+██╔════╝ ██║     ██╔══██╗╚══██╔══╝██╔════╝
+╚█████╗  ██║     ███████║   ██║   █████╗  
+ ╚═══██╗ ██║     ██╔══██║   ██║   ██╔══╝  
+██████╔╝ ███████╗██║  ██║   ██║   ███████╗
+╚═════╝  ╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝
+                                     Slate Backend
     """
 
     def validate_critical(self) -> None:

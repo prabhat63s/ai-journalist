@@ -76,7 +76,7 @@ export async function generateContent(
         else if (evt.type === "result") result = evt.payload as ArticleData;
         else if (evt.type === "report_saved" && result) { const r: ArticleData = result; result = { ...r, id: evt.id }; }
         else if (evt.type === "error") {
-          throw new Error(evt.message || "AI Journalist generation failed");
+          throw new Error(evt.message || "Slate generation failed");
         }
       } catch (parseErr) {
         if (parseErr instanceof Error && parseErr.message) {

@@ -11,7 +11,7 @@ export const buildExportHTML = (
   dataInsights?: Array<{ label: string; value: number; context: string }> | null,
   articleData?: ArticleData | null
 ) => {
-  const author = articleData?.user_email || "AI Journalist";
+  const author = articleData?.user_email || "Slate";
   const date = new Date(articleData?.created_at || Date.now()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const docId = articleData?.id || "N/A";
   const category = articleData?.category || "General";

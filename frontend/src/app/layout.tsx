@@ -16,7 +16,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "AI Journalist",
+  title: "Slate",
   description: "Advanced AI Journalism platform.",
 };
 

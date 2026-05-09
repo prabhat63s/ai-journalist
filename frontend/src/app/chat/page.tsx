@@ -46,6 +46,7 @@ export default function ChatPage() {
     const [isGenImage, setIsGenImage] = useState(false);
     const [isGenKit, setIsGenKit] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+    const [showChat, setShowChat] = useState(true);
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -76,75 +77,73 @@ export default function ChatPage() {
         }
     }, [user, loadSessions]);
 
+    const loadedSessionIdRef = useRef<string | null>(null);
+
     // Load session messages when activeSessionId changes
     useEffect(() => {
         const loadSessionData = async () => {
             if (!activeSessionId) {
                 setMessages([]);
                 setSelectedAssistantMsgId(null);
+                loadedSessionIdRef.current = null;
                 return;
             }
 
-            // Skip fetching if we already have messages for this session in memory
-            // This prevents 404s when a new session is being generated but not yet saved
-            if (messages.length > 0) return;
+            if (loadedSessionIdRef.current === activeSessionId) return;
 
             if (user && user.email) {
-                // Allow loading if:
-                // 1. We have no messages 
-                // 2. Either history hasn't loaded yet (so we don't know if it's known) 
-                //    OR it IS a known session
                 const isKnownSession = (dbSessionsRef.current || []).some(s => s.session_id === activeSessionId);
                 
-                if (messages.length === 0 && (!hasLoadedSessions || isKnownSession)) {
-                    try {
-                        const conv = await getConversation(activeSessionId, user.email);
-                        if (conv && conv.messages) {
-                            const formattedMessages: Message[] = conv.messages.map((m: any) => ({
-                                id: m.id,
-                                role: m.role,
-                                content: m.content,
-                                articleData: m.article_data ? {
-                                    ...m.article_data,
-                                    markdown_content: m.content,
-                                    image_url: m.image_url ?? m.article_data.image_url,
-                                    social_kit: m.social_kit ?? m.article_data.social_kit,
-                                } : undefined,
-                                imageUrl: m.image_url,
-                                socialKit: m.social_kit,
-                                updatedAt: new Date(m.created_at).getTime()
-                            }));
-                            setMessages(formattedMessages);
+                // If it's a newly created session (not in DB) and we already have messages in state, don't fetch.
+                if (!isKnownSession && messages.length > 0) {
+                    loadedSessionIdRef.current = activeSessionId;
+                    return;
+                }
 
-                            const latestArticleMsg = [...formattedMessages].reverse().find(m => m.articleData);
-                            if (latestArticleMsg) {
-                                setSelectedAssistantMsgId(latestArticleMsg.id);
-                            } else {
-                                setSelectedAssistantMsgId(null);
-                            }
+                try {
+                    const conv = await getConversation(activeSessionId, user.email);
+                    if (conv && conv.messages) {
+                        const formattedMessages: Message[] = conv.messages.map((m: any) => ({
+                            id: m.id,
+                            role: m.role,
+                            content: m.content,
+                            articleData: m.article_data ? {
+                                ...m.article_data,
+                                markdown_content: m.content,
+                                image_url: m.image_url ?? m.article_data.image_url,
+                                social_kit: m.social_kit ?? m.article_data.social_kit,
+                            } : undefined,
+                            imageUrl: m.image_url,
+                            socialKit: m.social_kit,
+                            updatedAt: new Date(m.created_at).getTime()
+                        }));
+                        setMessages(formattedMessages);
+
+                        const latestArticleMsg = [...formattedMessages].reverse().find(m => m.articleData);
+                        if (latestArticleMsg) {
+                            setSelectedAssistantMsgId(latestArticleMsg.id);
+                        } else {
+                            setSelectedAssistantMsgId(null);
                         }
-                    } catch (err: any) {
-                        console.error("Failed to load conversation:", err);
-                        setMessages([]);
-                        setSelectedAssistantMsgId(null);
-                        
-                        const isKnownSession = (dbSessionsRef.current || []).some(s => s.session_id === activeSessionId);
-                        
-                        const msg = err.message || "";
-                        // Only redirect if:
-                        // 1. It's a 404 error
-                        // 2. We have NO messages locally
-                        // 3. History HAS loaded and this session is definitely not in it
-                        if ((msg.includes("not found") || msg.includes("404") || msg.includes("Conversation not found")) && 
-                            messages.length === 0 && hasLoadedSessions && !isKnownSession) {
-                            setActiveSessionId(null);
-                            router.replace('/chat');
-                        }
+                        loadedSessionIdRef.current = activeSessionId;
+                    }
+                } catch (err: any) {
+                    console.error("Failed to load conversation:", err);
+                    setMessages([]);
+                    setSelectedAssistantMsgId(null);
+                    loadedSessionIdRef.current = null;
+                    
+                    const msg = err.message || "";
+                    if ((msg.includes("not found") || msg.includes("404") || msg.includes("Conversation not found")) && 
+                        hasLoadedSessions && !isKnownSession) {
+                        setActiveSessionId(null);
+                        router.replace('/chat');
                     }
                 }
             }
         };
         loadSessionData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeSessionId, user, setMessages, router]);
 
     // Fetch full report data when a message is selected (if missing research data AND editor is open)
@@ -384,6 +383,14 @@ export default function ChatPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {showEditor && (
+                            <button
+                                onClick={() => setShowChat(!showChat)}
+                                className="p-1.5 px-3 rounded-lg border border-border/60 bg-background hover:bg-surface hover:border-primary/30 transition-all flex items-center gap-2 text-[11px] font-bold text-muted-dark shadow-sm"
+                            >
+                                <span className="uppercase tracking-wider">{showChat ? "HIDE CHAT" : "SHOW CHAT"}</span>
+                            </button>
+                        )}
                         <button
                             onClick={() => setShowEditor(!showEditor)}
                             className="p-1.5 px-3 rounded-lg border border-border/60 bg-background hover:bg-surface hover:border-primary/30 transition-all flex items-center gap-2 text-[11px] font-bold text-primary shadow-sm"
@@ -400,7 +407,8 @@ export default function ChatPage() {
                 {/* Left: Chat Panel */}
                 <div className={cn(
                     "flex flex-col border-r border-border/40 transition-all duration-300",
-                    (currentArticleMsg && showEditor) || previewUrl ? "w-full md:w-[350px]" : "w-full items-center"
+                    (currentArticleMsg && showEditor) || previewUrl ? "w-full md:w-[350px]" : "w-full items-center",
+                    showEditor && !showChat ? "hidden" : "flex"
                 )}>
                     {/* Scrollable Content */}
                     <div className="flex-1 w-full overflow-y-auto hide-scrollbar">

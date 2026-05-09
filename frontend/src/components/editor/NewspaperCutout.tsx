@@ -39,7 +39,7 @@ const NEWSPAPER_STYLES: Record<NewspaperStyle, {
     mastheadFont: '"UnifrakturMaguntia", cursive',
     headlineFont: '"Libre Baskerville", serif',
     bodyFont: '"Crimson Pro", serif',
-    masthead: 'The Mighty Dispatch',
+    masthead: 'The Slate Dispatch',
     tagline: 'Global Intelligence & Analysis · Est. MDCCCXLVII'
   },
   modern: {
@@ -51,7 +51,7 @@ const NEWSPAPER_STYLES: Record<NewspaperStyle, {
     mastheadFont: '"Oswald", sans-serif',
     headlineFont: '"Oswald", sans-serif',
     bodyFont: '"Inter", sans-serif',
-    masthead: 'INTEL REPORT',
+    masthead: 'SLATE INTEL',
     tagline: 'Direct • Data-Driven • Deep Dive'
   },
   vintage: {
@@ -63,7 +63,7 @@ const NEWSPAPER_STYLES: Record<NewspaperStyle, {
     mastheadFont: '"UnifrakturMaguntia", cursive',
     headlineFont: '"Libre Baskerville", serif',
     bodyFont: '"Crimson Pro", serif',
-    masthead: 'The Daily Chronicle',
+    masthead: 'The Daily Slate',
     tagline: 'Established in the Age of Reason'
   }
 };
@@ -88,22 +88,27 @@ export default function NewspaperCutout({
   const style = NEWSPAPER_STYLES[activeStyle];
 
   // Enhanced content processing to show COMPLETE content with editorial distribution
-  const { leadParagraph, columns, pullQuote } = useMemo(() => {
-    const rawParagraphs = content.split('\n\n')
-      .map(p => p.trim())
-      .filter(p => p && !p.startsWith('Sources') && !p.startsWith('References'));
+  const { leadParagraph, remainingContent, pullQuote } = useMemo(() => {
+    // Strip out the entire References/Sources section before processing
+    const cleanContent = content.split(/#+\s*(?:References|Sources)/i)[0].replace(/^---$/gm, '').trim();
 
-    const processed = rawParagraphs.map(p => {
+    const rawParagraphs = cleanContent.split('\n\n')
+      .map(p => p.trim())
+      .filter(p => p);
+
+    type ContentItem = { type: 'header' | 'p' | 'quote'; content: string };
+
+    const processed: ContentItem[] = rawParagraphs.map(p => {
       if (p.startsWith('#')) {
-        return { type: 'header' as const, content: p.replace(/^#+\s+/, '').toUpperCase() };
+        return { type: 'header', content: p.replace(/^#+\s+/, '').toUpperCase() };
       }
-      return { type: 'p' as const, content: p.replace(/\*\*/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') };
+      return { type: 'p', content: p.replace(/\*\*/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') };
     });
 
     const firstPIndex = processed.findIndex(item => item.type === 'p');
     const lead = firstPIndex !== -1 ? processed[firstPIndex].content : "";
 
-    // Select a pull quote and REMOVE it from remaining content to avoid duplication
+    // Select a pull quote
     let quote = "The structural metamorphosis of the industrial heartland is not a choice, but a race for survival.";
     let remaining = processed.filter((_, idx) => idx !== firstPIndex);
 
@@ -113,13 +118,15 @@ export default function NewspaperCutout({
       remaining = remaining.filter((_, idx) => idx !== quoteIndex);
     }
 
-    // Split remaining content into 3 columns
-    const cols: typeof remaining[] = [[], [], []];
-    remaining.forEach((item, idx) => {
-      cols[idx % 3].push(item);
-    });
+    // We will insert the pull quote around the middle of the remaining content
+    const middleIndex = Math.max(1, Math.floor(remaining.length / 2));
+    if (remaining.length > 0) {
+      remaining.splice(middleIndex, 0, { type: 'quote' as const, content: quote });
+    } else {
+      remaining.push({ type: 'quote' as const, content: quote });
+    }
 
-    return { leadParagraph: lead, columns: cols, pullQuote: quote };
+    return { leadParagraph: lead, remainingContent: remaining, pullQuote: quote };
   }, [content]);
 
   const handleDownload = async () => {
@@ -245,6 +252,16 @@ export default function NewspaperCutout({
             </div>
           </header>
 
+          {/* HEADLINE */}
+          <div className="px-10 mt-6 mb-4 text-center relative z-10">
+            <h1 
+              className="text-[2.5rem] md:text-[3.5rem] font-bold leading-[1.1] tracking-tight"
+              style={{ fontFamily: style.headlineFont, color: style.ink }}
+            >
+              {title}
+            </h1>
+          </div>
+
           {/* FEATURE IMAGE */}
           {imageUrl && (
             <div className="px-10 mb-6 relative z-10">
@@ -266,72 +283,46 @@ export default function NewspaperCutout({
 
           {/* BODY SECTION */}
           <div className="px-10 py-6 relative z-10">
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_1px_1fr_1px_1fr] gap-x-6">
-              {/* Column 1 */}
-              <div className="space-y-4 text-justify hyphens-auto">
-                <p className="text-[0.93rem] leading-[1.65]">
-                  <span
-                    className="float-left text-[4.2rem] font-bold mr-3 mt-1 leading-[0.78] pr-1 pb-1"
-                    style={{ fontFamily: style.headlineFont, color: style.ink }}
-                  >
-                    {leadParagraph.charAt(0)}
-                  </span>
-                  {leadParagraph.slice(1)}
-                </p>
-                {columns[0].map((item, i) => (
-                  <div key={i}>
-                    {item.type === 'header' ? (
-                      <h3 className="text-center font-bold text-[0.88rem] uppercase tracking-widest border-y-[1px] py-1 mt-4 mb-3" style={{ fontFamily: style.headlineFont, borderColor: style.ink }}>
-                        {item.content}
-                      </h3>
-                    ) : (
-                      <p className="text-[0.93rem] leading-[1.65]">{item.content}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div 
+              className="columns-1 md:columns-3 gap-x-8 text-justify hyphens-auto min-w-0 break-words"
+              style={{ columnRule: `1px solid ${style.ink}30` }}
+            >
+              {/* Drop cap and lead paragraph */}
+              <p className="text-[0.95rem] leading-[1.7] mb-4 break-inside-avoid">
+                <span
+                  className="float-left text-[4.4rem] font-bold mr-3 mt-1 leading-[0.78] pr-1 pb-1"
+                  style={{ fontFamily: style.headlineFont, color: style.ink }}
+                >
+                  {leadParagraph.charAt(0)}
+                </span>
+                {leadParagraph.slice(1)}
+              </p>
 
-              {/* Rule 1 */}
-              <div className="hidden md:block w-px opacity-15" style={{ backgroundColor: style.ink }} />
-
-              {/* Column 2 */}
-              <div className="space-y-4 text-justify hyphens-auto pt-8 md:pt-0">
-                {/* Pull Quote in center column */}
-                <div className="border-y-2 py-4 my-4 text-center italic text-[1.05rem] leading-relaxed" style={{ borderColor: style.ink, fontFamily: style.headlineFont }}>
-                  "{pullQuote}"
-                  <cite className="block text-[0.58rem] uppercase not-italic font-bold tracking-[0.2em] mt-3 opacity-60">— Investigative Insight</cite>
+              {/* Remaining Content */}
+              {remainingContent.map((item, i) => (
+                <div key={i} className="mb-4 break-inside-avoid">
+                  {item.type === 'header' ? (
+                    <h3 
+                      className="text-center font-bold text-[0.9rem] uppercase tracking-widest border-y-[1px] py-1 mt-6 mb-3" 
+                      style={{ fontFamily: style.headlineFont, borderColor: style.ink }}
+                    >
+                      {item.content}
+                    </h3>
+                  ) : item.type === 'quote' ? (
+                    <div 
+                      className="border-y-2 py-4 my-6 mx-2 text-center italic text-[1.1rem] leading-relaxed" 
+                      style={{ borderColor: style.ink, fontFamily: style.headlineFont }}
+                    >
+                      "{item.content}"
+                      <cite className="block text-[0.55rem] uppercase not-italic font-bold tracking-[0.25em] mt-3 opacity-60">— Investigative Insight</cite>
+                    </div>
+                  ) : (
+                    <p className="text-[0.95rem] leading-[1.7]">
+                      {item.content}
+                    </p>
+                  )}
                 </div>
-
-                {columns[1].map((item, i) => (
-                  <div key={i}>
-                    {item.type === 'header' ? (
-                      <h3 className="text-center font-bold text-[0.88rem] uppercase tracking-widest border-y-[1px] py-1 mt-4 mb-3" style={{ fontFamily: style.headlineFont, borderColor: style.ink }}>
-                        {item.content}
-                      </h3>
-                    ) : (
-                      <p className="text-[0.93rem] leading-[1.65]">{item.content}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Rule 2 */}
-              <div className="hidden md:block w-px opacity-15" style={{ backgroundColor: style.ink }} />
-
-              {/* Column 3 */}
-              <div className="space-y-4 text-justify hyphens-auto pt-8 md:pt-0">
-                {columns[2].map((item, i) => (
-                  <div key={i}>
-                    {item.type === 'header' ? (
-                      <h3 className="text-center font-bold text-[0.88rem] uppercase tracking-widest border-y-[1px] py-1 mt-4 mb-3" style={{ fontFamily: style.headlineFont, borderColor: style.ink }}>
-                        {item.content}
-                      </h3>
-                    ) : (
-                      <p className="text-[0.93rem] leading-[1.65]">{item.content}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </div>
 
