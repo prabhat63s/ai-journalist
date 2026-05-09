@@ -37,7 +37,7 @@ export default function GeneratedImageCard({
   };
 
   return (
-    <div className="section-block no-print">
+    <div className="">
       <div className="section-label">Generated image</div>
       
       <div className="border-thin rounded-lg overflow-hidden bg-surface">

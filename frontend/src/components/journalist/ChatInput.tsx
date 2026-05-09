@@ -347,7 +347,7 @@ export function ChatInput({
             </button>
             {isLoading ? (
               <button onClick={onStop} className="w-6 h-6 flex items-center justify-center rounded-full bg-foreground text-background hover:bg-foreground/80 transition-all">
-                <Square size={14} fill="currentColor" />
+                <Square size={12} fill="currentColor" />
               </button>
             ) : (
               <button

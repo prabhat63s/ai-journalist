@@ -2,6 +2,29 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+const preprocessMarkdown = (content: string) => {
+    if (!content) return "";
+    
+    return content
+        // 0. Strip References & Sources section (often used for data only, not UI)
+        .split(/#+\s*(?:References|Sources)/i)[0]
+        // 1. Ensure headers have double newlines before them if they follow text
+        .replace(/(^|[^\n])(\s?#{1,6}\s+)/g, (match, p1, p2) => {
+            return p1 ? `${p1}\n\n${p2.trimStart()}` : p2;
+        })
+        // 2. Fix cases where heading and paragraph are merged: "# Title Paragraph" -> "# Title\n\nParagraph"
+        // Looks for a period followed by a space and a capital letter within a heading line
+        .replace(/^(#{1,6}\s+[^.\n]+\.)\s+([A-Z])/gm, "$1\n\n$2")
+        // 3. Fix cases where 7+ hashes are used (cap at h6)
+        .replace(/#{7,}/g, "######")
+        // 4. Ensure lists have a newline before them
+        .replace(/([^\n])\n([-*]\s+)/g, "$1\n\n$2")
+        .replace(/([^\n])\n(\d+\.\s+)/g, "$1\n\n$2")
+        // 5. Replace em dashes with standard dashes for cleaner editorial look
+        .replace(/—/g, "-")
+        .trim();
+};
+
 export default function StyledMarkdownViewer({
     markdown,
     onLinkClick,
@@ -9,129 +32,32 @@ export default function StyledMarkdownViewer({
     markdown: string;
     onLinkClick?: (href: string) => void;
 }) {
+    const processedMarkdown = preprocessMarkdown(markdown);
+
     return (
-        <div className="markdown-viewer">
-            <ReactMarkdown
+        <div className="markdown-viewer prose-premium dark:prose-invert animate-in fade-in slide-in-from-bottom-2 duration-700">
+            <ReactMarkdown 
                 remarkPlugins={[remarkGfm]}
                 components={{
-                    h1: ({ children }) => (
-                        <h1 className="text-3xl font-bold text-foreground">
-                            {children}
-                        </h1>
-                    ),
-
-                    h2: ({ children }) => (
-                        <h2 className="text-2xl font-semibold text-foreground mt-4 mb-1">
-                            {children}
-                        </h2>
-                    ),
-
-                    h3: ({ children }) => (
-                        <h3 className="text-xl font-semibold text-foreground mt-4 mb-1">
-                            {children}
-                        </h3>
-                    ),
-
-                    p: ({ children }) => (
-                        <p className="text-foreground text-sm leading-6">
-                            {children}
-                        </p>
-                    ),
-
-                    ul: ({ children }) => (
-                        <ul className="my-4 pl-6 space-y-2 list-disc marker:text-primary">
-                            {children}
-                        </ul>
-                    ),
-
-                    ol: ({ children }) => (
-                        <ol className="my-4 pl-6 space-y-2 list-decimal marker:text-primary text-foreground">
-                            {children}
-                        </ol>
-                    ),
-
-                    li: ({ children }) => (
-                        <li className="text-foreground/90 leading-relaxed pl-1">
-                            {children}
-                        </li>
-                    ),
-
-                    strong: ({ children }) => (
-                        <strong className="font-semibold text-primary">
-                            {children}
-                        </strong>
-                    ),
-
-                    blockquote: ({ children }) => (
-                        <blockquote className="my-6 pl-6 border-l-4 border-primary bg-primary/5 py-3 pr-4 rounded-r-xl text-foreground/80 italic">
-                            {children}
-                        </blockquote>
-                    ),
-
-                    code: ({ children }) => (
-                        <code className="bg-primary/10 text-primary px-1.5 py-0.5 rounded text-sm font-mono border border-primary/10">
-                            {children}
-                        </code>
-                    ),
-
-                    pre: ({ children }) => (
-                        <pre className="bg-[#1e1e1e] border border-black/5 rounded-xl p-5 my-6 overflow-x-auto shadow-sm text-white">
-                            {children}
-                        </pre>
-                    ),
-
-                    table: ({ children }) => (
-                        <div className="my-8 overflow-x-auto rounded-xl border border-border shadow-sm">
-                            <table className="w-full text-sm text-left">
-                                {children}
-                            </table>
-                        </div>
-                    ),
-
-                    thead: ({ children }) => (
-                        <thead className="bg-muted/30 text-foreground uppercase text-xs font-bold tracking-wider">
-                            {children}
-                        </thead>
-                    ),
-
-                    tbody: ({ children }) => (
-                        <tbody className="divide-y divide-border">
-                            {children}
-                        </tbody>
-                    ),
-
-                    th: ({ children }) => (
-                        <th className="px-6 py-4 font-semibold border-b border-border text-foreground">{children}</th>
-                    ),
-
-                    td: ({ children }) => (
-                        <td className="px-6 py-4 text-foreground/80">{children}</td>
-                    ),
-
-                    tr: ({ children }) => (
-                        <tr className="hover:bg-muted/20 transition-colors">{children}</tr>
-                    ),
-
-                    a: ({ children, href }) => (
+                    a: ({ node, ...props }) => (
                         <a 
-                            href={href} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-primary hover:text-primary/80 underline underline-offset-4 decoration-primary/30 transition-colors"
+                            {...props} 
                             onClick={(e) => {
-                                if (onLinkClick && href) {
+                                if (onLinkClick && props.href) {
                                     e.preventDefault();
-                                    onLinkClick(href);
+                                    onLinkClick(props.href);
                                 }
                             }}
-                        >
-                            {children}
-                        </a>
-                    ),
+                            className="cursor-pointer"
+                        />
+                    )
                 }}
             >
-                {markdown}
+                {processedMarkdown}
             </ReactMarkdown>
         </div>
     );
 }
+
+
+

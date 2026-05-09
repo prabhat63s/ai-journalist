@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor } from '@tiptap/react';
 import {
   Copy,
   Check,
@@ -25,7 +25,6 @@ import {
   Activity,
   Loader2,
   Languages,
-  X,
   Link2,
   Image as ImageIcon,
   Type,
@@ -33,8 +32,7 @@ import {
   Megaphone,
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
-import { BubbleMenu as TiptapBubbleMenu } from '@tiptap/react/menus';
-import { AuditReport, SocialKit, ArticleData } from '@/types/journalist.types';
+import { AuditReport, SocialKit, ArticleData, ArticleStats } from '@/types/journalist.types';
 import { defaultExtensions, EditorWorkspace, NewspaperCutout, SocialMediaKit } from '@/components/editor';
 import { calculateStats, useArticleStats } from '@/hooks/use-article-stats';
 import { handleDownloadImage, handleExportPDF, handleExportWord } from '@/lib/exports';
@@ -42,10 +40,9 @@ import { translateArticle, generateAudioBriefing } from '@/services/journalist.s
 import { toastSuccess, toastInfo, toastError } from '@/lib/friendly-errors';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LANGUAGES } from '@/constants/journalist';
-import GeneratedImageCard from './GeneratedImageCard';
-import { SmartChart } from './SmartChart';
 import { SEOAnalyzer } from './SEOAnalyzer';
 import { AudioBriefingPlayer } from './AudioBriefingPlayer';
+import { FaFilePdf } from 'react-icons/fa6';
 
 interface ArticleEditorProps {
   id: string;
@@ -103,17 +100,35 @@ export default function ArticleEditor({
   const [modalUrl, setModalUrl] = useState("");
   const [viewMode, setViewMode] = useState<'editor' | 'newspaper' | 'social'>('editor');
   const prevSocialKitRef = useRef(socialKit);
+  const [showSEO, setShowSEO] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isAudioPlayerOpen, setIsAudioPlayerOpen] = useState(false);
+  const [language, setLanguage] = useState("English");
+  const [isTranslating, setIsTranslating] = useState(false);
+
   useEffect(() => {
     if (socialKit && !prevSocialKitRef.current) {
       setViewMode('social');
     }
     prevSocialKitRef.current = socialKit;
   }, [socialKit]);
-  const [showSEO, setShowSEO] = useState(false);
-  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [language, setLanguage] = useState("English");
-  const [isTranslating, setIsTranslating] = useState(false);
+
+  // Load existing audio briefing if available
+  useEffect(() => {
+    if (articleData?.audio_briefing?.audio_b64 && !audioUrl) {
+      try {
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(articleData.audio_briefing.audio_b64), c => c.charCodeAt(0))],
+          { type: 'audio/wav' }
+        );
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
+      } catch (err) {
+        console.error("Failed to load existing audio briefing:", err);
+      }
+    }
+  }, [articleData?.audio_briefing, audioUrl]);
 
   const { updateStats } = useArticleStats();
 
@@ -242,12 +257,36 @@ export default function ArticleEditor({
 
   const handleGenerateAudio = async () => {
     if (!email || !editor) return;
+
+    // 1. Check if audio is already loaded and we just need to play it
+    if (audioUrl) {
+      setIsAudioPlayerOpen(true);
+      return;
+    }
+
+    // 2. Check if audio exists in the report data from DB
+    if (articleData?.audio_briefing?.audio_b64) {
+      try {
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(articleData.audio_briefing.audio_b64), c => c.charCodeAt(0))],
+          { type: 'audio/wav' }
+        );
+        const url = URL.createObjectURL(audioBlob);
+        setAudioUrl(url);
+        setIsAudioPlayerOpen(true);
+        return;
+      } catch (err) {
+        console.error("Failed to recover audio from DB:", err);
+      }
+    }
+
+    // 3. Otherwise, generate it
     setIsGeneratingAudio(true);
     toastInfo("Initializing AI Newsroom for audio briefing...");
 
     try {
       const markdown = editor.getText({ blockSeparator: "\n\n" });
-      const result = await generateAudioBriefing(markdown, email, articleData?.id);
+      const result = await generateAudioBriefing(markdown, email, articleData?.id || _id);
 
       if (result.audio_b64) {
         const audioBlob = new Blob(
@@ -256,6 +295,7 @@ export default function ArticleEditor({
         );
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
+        setIsAudioPlayerOpen(true);
         toastSuccess("AI Audio Briefing is ready to play!");
       }
     } catch (err) {
@@ -285,137 +325,152 @@ export default function ArticleEditor({
     }
   };
 
-  const stats = editor ? calculateStats(editor.getText()) : null;
+  const handleManualSaveInternal = async () => {
+    if (!editor || !onManualSave || isSaving) return;
+
+    try {
+      const markdown = (editor as any).getMarkdown();
+      await onManualSave(markdown);
+      toastSuccess("Investigation version saved successfully!");
+    } catch (err) {
+      toastError(err, "save_article");
+    }
+  };
+
+  const stats: ArticleStats | null = editor ? calculateStats(editor.getText()) : null;
 
   return (
     <div className="flex-1 flex flex-col bg-background overflow-hidden h-full selection:bg-primary/20 selection:text-primary">
-      {/* Sticky Toolbar */}
-      <div className="sticky top-0 z-40 border-b border-border/40 no-print bg-background/90 backdrop-blur-xl">
-        <div className="flex items-center justify-between  gap-4 px-4 py-2.5 overflow-x-auto no-scrollbar whitespace-nowrap w-full relative">
-          <div className="flex items-center gap-2">
-            {/* Stats Badge */}
+      {/* Sticky Header - Premium Editorial Bar */}
+      <div className="sticky top-0 z-50 border-b border-border/40 no-print bg-background/90 backdrop-blur-xl px-4">
+        <div className="flex items-center justify-between gap-6 w-full overflow-x-scroll">
+          {/* Left: Article Status & Stats */}
+          <div className="flex items-center gap-4 shrink-0">
             {stats && (
-              <div className="hidden lg:flex items-center gap-3 px-3 py-2 rounded-lg bg-surface/50 border border-border/40 text-[10px] font-bold tracking-tight">
-                <div className="flex items-center gap-1.5 text-muted-dark">
+              <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-surface/40 border border-border/20 transition-all hover:bg-surface/60">
+                <div className="flex items-center gap-2 text-[10px] font-bold tracking-tight text-muted-dark">
                   <Type size={12} className="text-primary/60" />
                   <span>{stats.words} WORDS</span>
                 </div>
                 <div className="w-px h-3 bg-border/40" />
-                <div className="flex items-center gap-1.5 text-muted-dark">
+                <div className="flex items-center gap-2 text-[10px] font-bold tracking-tight text-muted-dark">
                   <Layout size={12} className="text-primary/60" />
                   <span>{stats.readingTime} MIN READ</span>
                 </div>
               </div>
             )}
 
-            {/* Persona & Brand Voice Badges */}
-            <div className="hidden sm:flex items-center gap-2">
-              <div className="px-2.5 py-2 rounded-lg bg-surface-hover border border-border/40 text-[9px] font-bold uppercase tracking-[0.15em] text-primary flex items-center gap-2">
-                <div className="w-1 h-1 rounded-full bg-primary" />
-                {persona}
-              </div>
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10 text-[10px] font-bold uppercase tracking-wider text-primary">
+              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              {persona}
             </div>
           </div>
 
-          <div className="flex items-center gap-1 bg-surface/40 p-0.5 rounded-lg border border-border/20 shrink-0">
-            <button
-              onClick={() => setViewMode(v => v === 'editor' ? 'newspaper' : 'editor')}
-              className={`p-2 rounded-md transition-all ${viewMode === 'newspaper' ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-              title={viewMode === 'newspaper' ? 'Back to Editor' : 'Newspaper View'}
-            >
-              <Newspaper size={15} />
-            </button>
-            <button
-              onClick={() => setViewMode(v => v === 'social' ? 'editor' : 'social')}
-              className={`p-2 rounded-md transition-all ${viewMode === 'social' ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-              title={viewMode === 'social' ? 'Back to Editor' : 'Social Media Kit'}
-            >
-              <Megaphone size={15} />
-            </button>
-            <button
-              onClick={() => setShowSEO(p => !p)}
-              className={`p-2 rounded-md transition-all ${showSEO ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-              title="SEO & Intelligence Audit"
-            >
-              <Activity size={15} />
-            </button>
-            <button
-              onClick={handleGenerateAudio}
-              disabled={isGeneratingAudio}
-              className={`p-2 rounded-md transition-all ${isGeneratingAudio ? 'bg-primary/10 text-primary' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-              title="Generate AI Audio Briefing"
-            >
-              {isGeneratingAudio ? <Loader2 size={15} className="animate-spin" /> : <Mic2 size={15} />}
-            </button>
-            <div className="w-px h-4 bg-border/40 mx-1" />
-
-            <button
-              onClick={openLanguageModal}
-              className={`p-2 rounded-md transition-all ${isTranslating ? 'animate-pulse text-primary' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-              title="Translate Article"
-            >
-              <Languages size={15} />
-            </button>
-            <div className="w-px h-4 bg-border/40 mx-1" />
-            <button
-              onClick={handleCopy}
-              title="Copy as plain text"
-              className={`p-2 rounded-md transition-all ${copied ? 'text-success bg-success/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
-            >
-              {copied ? <Check size={15} /> : <Copy size={15} />}
-            </button>
-            {onManualSave && (
+          {/* Right: Actions & Tools Grouped */}
+          <div className="flex items-center gap-2 py-1">
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-1 px-1">
               <button
-                onClick={() => editor && onManualSave((editor as any).getMarkdown())}
-                disabled={isSaving}
-                title="Save as new version"
-                className={`p-2 rounded-md transition-all ${isSaving ? 'opacity-50' : 'text-muted-dark hover:bg-surface hover:text-foreground hover:text-primary'}`}
+                onClick={() => setViewMode(v => v === 'editor' ? 'newspaper' : 'editor')}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${viewMode === 'newspaper' ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title="Newspaper View"
               >
-                <Save size={15} className={isSaving ? "animate-pulse" : ""} />
+                <Newspaper size={16} />
               </button>
-            )}
-            <button
-              onClick={() => {
-                const allSources = [
-                  ...(sources || []),
-                  ...(articleData?.research_summary?.sources || []),
-                  ...(articleData?.sources || [])
-                ];
-                const uniqueSources = allSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
+              <button
+                onClick={() => setViewMode(v => v === 'social' ? 'editor' : 'social')}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${viewMode === 'social' ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title="Social Media Kit"
+              >
+                <Megaphone size={16} />
+              </button>
+            </div>
 
-                const dataInsights = [
-                  ...(articleData?.data_insights || []),
-                  ...(articleData?.research_summary?.data_insights || [])
-                ];
-                const uniqueInsights = dataInsights.filter((v, i, a) => a.findIndex(t => t.label === v.label) === i);
-                handleExportWord(title, editor?.getHTML() || "", imageUrl, socialKit, audit, articleData?.research_summary, uniqueSources, stats, uniqueInsights);
-              }}
-              title="Export as Word"
-              className="p-2 rounded-md text-muted-dark hover:bg-surface hover:text-foreground transition-all"
-            >
-              <FileDown size={15} />
-            </button>
-            <button
-              onClick={() => {
-                const allSources = [
-                  ...(sources || []),
-                  ...(articleData?.research_summary?.sources || []),
-                  ...(articleData?.sources || [])
-                ];
-                const uniqueSources = allSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
+            {/* Analysis & Intelligence */}
+            <div className="flex items-center gap-1 px-1">
+              <button
+                onClick={() => setShowSEO(p => !p)}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${showSEO ? 'text-primary bg-primary/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title="SEO & Intelligence"
+              >
+                <Activity size={16} />
+              </button>
+              <button
+                onClick={handleGenerateAudio}
+                disabled={isGeneratingAudio}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${isGeneratingAudio ? 'bg-primary/10 text-primary' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title="AI Audio Briefing"
+              >
+                {isGeneratingAudio ? <Loader2 size={16} className="animate-spin" /> : <Mic2 size={16} />}
+              </button>
+            </div>
 
-                const dataInsights = [
-                  ...(articleData?.data_insights || []),
-                  ...(articleData?.research_summary?.data_insights || [])
-                ];
-                const uniqueInsights = dataInsights.filter((v, i, a) => a.findIndex(t => t.label === v.label) === i);
-                handleExportPDF(title, editor?.getHTML() || "", imageUrl, socialKit, audit, articleData?.research_summary, uniqueSources, stats, uniqueInsights);
-              }}
-              title="Print / Export PDF"
-              className="p-2 rounded-md text-muted-dark hover:bg-surface hover:text-foreground transition-all"
-            >
-              <Download size={15} />
-            </button>
+            {/* Language & Versions */}
+            <div className="flex items-center gap-1 px-1">
+              <button
+                onClick={openLanguageModal}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${isTranslating ? 'animate-pulse text-primary' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title="Translate"
+              >
+                <Languages size={16} />
+              </button>
+              {onManualSave && (
+                <button
+                  onClick={handleManualSaveInternal}
+                  disabled={isSaving}
+                  className={`p-2 rounded-lg transition-all active:scale-90 ${isSaving ? 'bg-primary/10 text-primary' : 'text-muted-dark hover:bg-primary/10 hover:text-primary'}`}
+                  title="Save Version"
+                >
+                  {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                </button>
+              )}
+            </div>
+
+            {/* Export & Share */}
+            <div className="flex items-center gap-1 px-1">
+              <button
+                onClick={handleCopy}
+                className={`p-2 rounded-lg transition-all active:scale-90 ${copied ? 'text-success bg-success/10' : 'text-muted-dark hover:bg-surface hover:text-foreground'}`}
+                title="Copy Text"
+              >
+                {copied ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-2 rounded-lg text-muted-dark hover:bg-surface hover:text-foreground transition-all active:scale-90" title="Export">
+                    <Download size={16} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-background/95 backdrop-blur-xl border-border/40 rounded-xl p-1 shadow-2xl min-w-[160px] z-[999]">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const allSources = [...(sources || []), ...(articleData?.research_summary?.sources || []), ...(articleData?.sources || [])];
+                      const uniqueSources = allSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
+                      const dataInsights = [...(articleData?.data_insights || []), ...(articleData?.research_summary?.data_insights || [])];
+                      const uniqueInsights = dataInsights.filter((v, i, a) => a.findIndex(t => t.label === v.label) === i);
+                      handleExportWord(title, editor?.getHTML() || "", imageUrl, socialKit, audit, articleData?.research_summary, uniqueSources, uniqueInsights, articleData);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-surface focus:bg-surface"
+                  >
+                    <FileDown size={14} className="text-muted" />
+                    <span className="text-[13px] font-medium">Word Document</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const allSources = [...(sources || []), ...(articleData?.research_summary?.sources || []), ...(articleData?.sources || [])];
+                      const uniqueSources = allSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
+                      const dataInsights = [...(articleData?.data_insights || []), ...(articleData?.research_summary?.data_insights || [])];
+                      const uniqueInsights = dataInsights.filter((v, i, a) => a.findIndex(t => t.label === v.label) === i);
+                      handleExportPDF(title, editor?.getHTML() || "", imageUrl, socialKit, audit, articleData?.research_summary, uniqueSources, uniqueInsights, articleData);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer hover:bg-surface focus:bg-surface"
+                  >
+                    <FaFilePdf size={14} className="text-muted" />
+                    <span className="text-[13px] font-medium">PDF / Print</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </div>
@@ -435,44 +490,217 @@ export default function ArticleEditor({
           onCopySocial={handleCopySocialContent}
           onRegenerateSocial={(options) => onGenerateSocialKit && onGenerateSocialKit(content, articleData?.id, options)}
           isGeneratingSocial={isGeneratingSocialKit}
+          stats={stats}
+          onRegenerateImage={handleRegenerateImage}
+          onEditImagePrompt={handleEditPrompt}
+          onDownloadImage={() => handleDownloadImage(imageUrl || "", title)}
+          isGeneratingImage={isGeneratingImage}
         />
 
         {/* Right Sidebar: Research & Editorial Intelligence */}
-        <div className="hidden lg:block w-[400px] shrink-0 h-full border-l border-border/40 bg-surface/10 overflow-y-auto no-scrollbar">
-          <div className="p-6">
-            {/* top keywords stats */}
-            {stats && stats.keywords.length > 0 && (
-              <div className="mb-8 space-y-3">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Top Keywords</h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {stats.keywords.map(([key, count], i) => (
-                    <div key={i} className="px-2.5 py-1 text-xs rounded font-semibold bg-primary/10 border border-primary/20 flex items-center gap-2">
-                      <span className="text-primary">{key}</span>
-                      <span className="text-primary/60">{count}X</span>
-                    </div>
-                  ))}
-                </div>
+        <div className="hidden lg:block w-[350px] p-4 shrink-0 h-full border-l border-border/40 bg-surface/10 overflow-y-auto no-scrollbar">
+          {/* Editorial Intelligence Dashboard (Tabs: Insights, Audit, Sources) */}
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-linear-to-r from-transparent via-border to-transparent" />
+              <div className="px-4 py-1.5 rounded-full border border-border bg-surface/50 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+                Editorial Intelligence
               </div>
-            )}
+              <div className="h-px flex-1 bg-linear-to-r from-transparent via-border to-transparent" />
+            </div>
 
-            {/* Generated Image Card */}
-            {imageUrl && (
-              <GeneratedImageCard
-                imageUrl={imageUrl}
-                prompt={imagePrompt}
-                onRegenerate={handleRegenerateImage}
-                onEditPrompt={handleEditPrompt}
-                onDownload={() => handleDownloadImage(imageUrl, title)}
-                isGenerating={isGeneratingImage}
-              />
-            )}
+            {/* Tab Navigation */}
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-surface/40 border border-border/50 overflow-x-auto no-scrollbar">
+              {[
+                { id: 'insights', label: 'Data', icon: BarChart3, color: 'text-primary' },
+                { id: 'audit', label: 'Audit', icon: ShieldAlert, color: 'text-warning' },
+                { id: 'sources', label: 'Sources', icon: Link2, color: 'text-success' },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveEditorialTab(tab.id as 'insights' | 'audit' | 'sources')}
+                  className={`w-full flex items-center justify-center border border-border/60 gap-2 px-4 py-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${activeEditorialTab === tab.id
+                    ? 'bg-background text-foreground'
+                    : 'text-muted hover:text-foreground hover:bg-background/40'
+                    }`}
+                >
+                  <tab.icon size={14} className={activeEditorialTab === tab.id ? tab.color : 'text-muted/60'} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-            {/* Editorial Intelligence Dashboard (Tabs: Insights, Audit, Sources) */}
-            <div className="space-y-6 my-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="min-h-[200px]">
+              {/* Data Insights Tab */}
+              {activeEditorialTab === 'insights' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  {(() => {
+                    const dataInsights = [
+                      ...(articleData?.data_insights || []),
+                      ...(articleData?.research_summary?.data_insights || [])
+                    ];
+                    const uniqueInsights = dataInsights.filter((v, i, a) => a.findIndex(t => t.label === v.label) === i);
+                    return uniqueInsights.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-3">
+                        {uniqueInsights.map((insight, idx) => (
+                          <div
+                            key={idx}
+                            className="group p-4 rounded-2xl bg-surface/40 border border-border/60 hover:border-primary/40 hover:bg-surface/60 transition-all duration-300"
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 rounded-full bg-primary/60 group-hover:bg-primary transition-colors" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted group-hover:text-foreground transition-colors">
+                                  {insight.label}
+                                </span>
+                              </div>
+                              <div className="flex items-baseline gap-0.5">
+                                <span className="text-lg font-black text-primary tabular-nums">
+                                  {insight.value}
+                                </span>
+                                <span className="text-[10px] font-bold text-primary/60">%</span>
+                              </div>
+                            </div>
+
+                            {/* Minimalist Progress Bar */}
+                            <div className="h-1 w-full bg-border/30 rounded-full overflow-hidden mb-3">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${insight.value}%` }}
+                                transition={{ duration: 1, ease: "easeOut" }}
+                                className="h-full bg-linear-to-r from-primary/80 to-primary"
+                              />
+                            </div>
+
+                            <p className="text-[12px] text-muted-dark leading-relaxed bg-background/30 p-2.5 rounded-xl border border-border/20 group-hover:border-primary/10 transition-colors">
+                              <span className="text-[9px] font-bold uppercase text-primary/40 block mb-1">Impact Analysis</span>
+                              {insight.context}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No statistical insights extracted for this article.</div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Audit Tab */}
+              {activeEditorialTab === 'audit' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <div className={`p-5 rounded-2xl bg-surface/30 border border-border/60 no-print transition-all duration-500 ${!audit ? 'opacity-50 grayscale' : 'opacity-100'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle size={18} className="text-primary" />
+                        <h3 className="text-sm font-bold text-foreground">Journalist Pro Audit</h3>
+                      </div>
+                      {audit ? (
+                        <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${audit.status === 'Passed' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
+                          {audit.status}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded bg-surface text-muted text-[10px] font-bold uppercase animate-pulse">Analyzing...</span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col h-[200px] overflow-y-auto gap-4">
+                      <div className="p-3 rounded-xl bg-background/50 border border-border/40">
+                        <div className="flex items-center gap-2 mb-2">
+                          <TrendingUp size={14} className="text-primary" />
+                          <span className="text-[11px] font-bold uppercase text-muted">Sentiment & Tone</span>
+                        </div>
+                        <p className="text-[12px] text-muted-dark leading-relaxed">
+                          {audit?.sentiment_tone || "Evaluating tone consistency and investigative depth..."}
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-background/50 border border-border/40">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Users size={14} className="text-primary" />
+                          <span className="text-[11px] font-bold uppercase text-muted">Entity Coverage</span>
+                        </div>
+                        <p className="text-[12px] text-muted-dark leading-relaxed">
+                          {audit?.entity_coverage || "Analyzing stakeholder coverage and grounding citations quality..."}
+                        </p>
+                      </div>
+                      <div className="mt-4 p-3 rounded-xl bg-background border border-border/40">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Target size={14} className="text-primary" />
+                          <span className="text-[11px] font-bold text-primary">SEO Recommendation</span>
+                        </div>
+                        <p className="text-[11px] text-muted-dark italic">
+                          {audit?.seo_recommendation || `Optimizing semantic relevance for "${title}"...`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sources Tab */}
+              {activeEditorialTab === 'sources' && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  {(() => {
+                    const allSources = [
+                      ...(sources || []),
+                      ...(articleData?.research_summary?.sources || []),
+                      ...(articleData?.sources || [])
+                    ];
+                    const normalizedSources = allSources.filter((source) =>
+                      source &&
+                      typeof source === "object" &&
+                      typeof source.url === "string" &&
+                      source.url.trim().length > 0
+                    );
+                    const uniqueSources = normalizedSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
+                    return uniqueSources.length > 0 ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <h1 className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-6 flex items-center gap-2">
+                          Verified Sources & References
+                        </h1>
+                        <div className="grid grid-cols-1 h-[200px] overflow-y-auto gap-x-12 gap-y-2">
+                          {uniqueSources.map((source, i) => (
+                            <div key={i} className="group flex gap-4">
+                              <div className="flex flex-col items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-surface border border-border flex items-center justify-center text-[10px] font-bold text-muted group-hover:bg-primary group-hover:text-white transition-all shadow-sm">
+                                  {i + 1}
+                                </div>
+                                <div className="flex-1 w-px bg-border/40 group-last:hidden" />
+                              </div>
+                              <div className="pb-4">
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[14px] font-bold text-foreground hover:text-primary transition-colors flex items-center gap-2 mb-1.5 underline decoration-border group-hover:decoration-primary/40 underline-offset-4"
+                                >
+                                  {source.title}
+                                  <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </a>
+                                <p className="text-[12px] text-muted-dark leading-relaxed line-clamp-2">
+                                  {source.description}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No verified sources recorded for this report.</div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Research & Intelligence Dashboard */}
+          {articleData?.research_summary && (
+            <div className="space-y-6 mt-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
               <div className="flex items-center gap-3">
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
                 <div className="px-4 py-1.5 rounded-full border border-border bg-surface/50 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
-                  Editorial Intelligence
+                  Research Intelligence
                 </div>
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
               </div>
@@ -480,434 +708,273 @@ export default function ArticleEditor({
               {/* Tab Navigation */}
               <div className="flex items-center gap-1 p-1 rounded-xl bg-surface/40 border border-border/50 overflow-x-auto no-scrollbar">
                 {[
-                  { id: 'insights', label: 'Data Intelligence', icon: BarChart3, color: 'text-primary' },
-                  { id: 'audit', label: 'Journalist Pro Audit', icon: AlertCircle, color: 'text-warning' },
-                  { id: 'sources', label: 'Verified Sources', icon: Link2, color: 'text-success' },
+                  { id: 'facts', label: 'Core Facts', icon: CheckCircle2, color: 'text-success' },
+                  { id: 'stats', label: 'Statistics', icon: BarChart3, color: 'text-primary' },
+                  { id: 'trends', label: 'Trends', icon: Zap, color: 'text-warning' },
+                  { id: 'perspectives', label: 'Perspectives', icon: ShieldAlert, color: 'text-destructive' },
+                  { id: 'stakeholders', label: 'Stakeholders', icon: Users2, color: 'text-primary' },
+                  { id: 'examples', label: 'Examples', icon: Lightbulb, color: 'text-success' },
                 ].map((tab) => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveEditorialTab(tab.id as 'insights' | 'audit' | 'sources')}
-                    className={`w-full flex items-center justify-center border border-border/60 gap-2 px-4 py-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${activeEditorialTab === tab.id
+                    onClick={() => setActiveTab(tab.id as 'facts' | 'stats' | 'trends' | 'perspectives' | 'stakeholders' | 'examples')}
+                    className={`w-full flex items-center justify-center border border-border/60 gap-2 px-4 py-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${activeTab === tab.id
                       ? 'bg-background text-foreground'
                       : 'text-muted hover:text-foreground hover:bg-background/40'
                       }`}
                   >
-                    <tab.icon size={14} className={activeEditorialTab === tab.id ? tab.color : 'text-muted/60'} />
+                    <tab.icon size={14} className={activeTab === tab.id ? tab.color : 'text-muted/60'} />
                     {tab.label}
                   </button>
                 ))}
               </div>
 
-              <div className="min-h-[200px]">
-                {/* Data Insights Tab */}
-                {activeEditorialTab === 'insights' && (
+              <div className="h-auto">
+                {/* Core Facts Tab */}
+                {activeTab === 'facts' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    {(() => {
-                      const dataInsights = [
-                        ...(articleData?.data_insights || []),
-                        ...(articleData?.research_summary?.data_insights || [])
-                      ];
-                      const uniqueInsights = dataInsights.filter((v, i, a) => a.findIndex(t => t.label === v.label) === i);
-                      return uniqueInsights.length > 0 ? (
-                        <SmartChart data={uniqueInsights} title={`${title.slice(0, 30)} - Statistical Analysis`} />
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No statistical insights extracted for this article.</div>
-                      );
-                    })()}
+                    {(articleData.research_summary.core_facts?.length || 0) > 0 ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-success/10 flex items-center justify-center text-success">
+                            <CheckCircle2 size={20} />
+                          </div>
+                          <div>
+                            <h4 className="text-[14px] font-bold text-foreground">Core Investigative Facts</h4>
+                            <p className="text-[11px] text-muted">Primary verified data points discovered.</p>
+                          </div>
+                        </div>
+                        <ul className="max-h-[300px] overflow-y-auto">
+                          {articleData.research_summary.core_facts?.map((fact, i) => (
+                            <li key={i} className="text-[13px] text-muted-dark leading-relaxed flex items-start gap-3 p-2 rounded-2xl hover:bg-background/40 transition-colors">
+                              <span className="w-2 h-2 rounded-full bg-success/40 mt-1.5 shrink-0" />
+                              {typeof fact === 'string' ? fact : JSON.stringify(fact)}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No core facts available for this research stage.</div>
+                    )}
                   </div>
                 )}
 
-                {/* Audit Tab */}
-                {activeEditorialTab === 'audit' && (
+                {/* Statistics Tab */}
+                {activeTab === 'stats' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <div className={`p-5 rounded-2xl bg-surface/30 border border-border/60 no-print transition-all duration-500 ${!audit ? 'opacity-50 grayscale' : 'opacity-100'}`}>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <AlertCircle size={18} className="text-primary" />
-                          <h3 className="text-sm font-bold text-foreground">Journalist Pro Audit</h3>
-                        </div>
-                        {audit ? (
-                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${audit.status === 'Passed' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
-                            {audit.status}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 rounded bg-surface text-muted text-[10px] font-bold uppercase animate-pulse">Analyzing...</span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col h-[200px] overflow-y-auto gap-4">
-                        <div className="p-3 rounded-xl bg-background/50 border border-border/40">
-                          <div className="flex items-center gap-2 mb-2">
-                            <TrendingUp size={14} className="text-primary" />
-                            <span className="text-[11px] font-bold uppercase text-muted">Sentiment & Tone</span>
+                    {(articleData.research_summary.statistics?.length || 0) > 0 ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                            <BarChart3 size={20} />
                           </div>
-                          <p className="text-[12px] text-muted-dark leading-relaxed">
-                            {audit?.sentiment_tone || "Evaluating tone consistency and investigative depth..."}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-background/50 border border-border/40">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Users size={14} className="text-primary" />
-                            <span className="text-[11px] font-bold uppercase text-muted">Entity Coverage</span>
+                          <div>
+                            <h4 className="text-[14px] font-bold text-foreground">Statistical Deep-Dive</h4>
+                            <p className="text-[11px] text-muted">Quantitative metrics and hard evidence.</p>
                           </div>
-                          <p className="text-[12px] text-muted-dark leading-relaxed">
-                            {audit?.entity_coverage || "Analyzing stakeholder coverage and grounding citations quality..."}
-                          </p>
                         </div>
-                        <div className="mt-4 p-3 rounded-xl bg-background border border-border/40">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Target size={14} className="text-primary" />
-                            <span className="text-[11px] font-bold text-primary">SEO Recommendation</span>
-                          </div>
-                          <p className="text-[11px] text-muted-dark italic">
-                            {audit?.seo_recommendation || `Optimizing semantic relevance for "${title}"...`}
-                          </p>
+                        <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
+                          {articleData.research_summary.statistics?.map((stat, i) => (
+                            <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 text-[13px] text-primary font-medium hover:scale-[1.01] transition-transform">
+                              <span className="text-[10px] uppercase font-bold text-muted/60 block mb-1">Evidence Point {i + 1}</span>
+                              {typeof stat === 'string' ? stat : JSON.stringify(stat)}
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No statistical data found during research.</div>
+                    )}
                   </div>
                 )}
 
-                {/* Sources Tab */}
-                {activeEditorialTab === 'sources' && (
+                {/* Trends Tab */}
+                {activeTab === 'trends' && (
                   <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    {(() => {
-                      const allSources = [
-                        ...(sources || []),
-                        ...(articleData?.research_summary?.sources || []),
-                        ...(articleData?.sources || [])
-                      ];
-                      const normalizedSources = allSources.filter((source) =>
-                        source &&
-                        typeof source === "object" &&
-                        typeof source.url === "string" &&
-                        source.url.trim().length > 0
-                      );
-                      const uniqueSources = normalizedSources.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
-                      return uniqueSources.length > 0 ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-6 flex items-center gap-2">
-                            <div className="w-8 h-1px bg-primary/30"></div>
-                            Verified Sources & References
+                    {(articleData.research_summary.trends?.length || 0) > 0 ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-warning/10 flex items-center justify-center text-warning">
+                            <Zap size={20} />
                           </div>
-                          <div className="grid grid-cols-1 h-[200px] overflow-y-auto gap-x-12 gap-y-2">
-                            {uniqueSources.map((source, i) => (
-                              <div key={i} className="group flex gap-4">
-                                <div className="flex flex-col items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-surface border border-border flex items-center justify-center text-[10px] font-bold text-muted group-hover:bg-primary group-hover:text-white transition-all shadow-sm">
-                                    {i + 1}
-                                  </div>
-                                  <div className="flex-1 w-px bg-border/40 group-last:hidden" />
+                          <div>
+                            <h4 className="text-[14px] font-bold text-foreground">Emerging Trends</h4>
+                            <p className="text-[11px] text-muted">Future directions and market shifts discovered.</p>
+                          </div>
+                        </div>
+                        <div className="flex max-h-[300px] overflow-y-auto flex-wrap gap-3">
+                          {articleData.research_summary.trends?.map((trend, i) => (
+                            <span key={i} className="px-5 py-3 rounded-2xl bg-warning/5 border border-warning/10 text-[12px] font-bold text-warning-dark hover:bg-warning/10 transition-colors">
+                              {typeof trend === 'string' ? trend : JSON.stringify(trend)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No emerging trends identified in this query.</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Perspectives Tab */}
+                {activeTab === 'perspectives' && (
+                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    {((articleData.research_summary.hidden_challenges?.length || 0) > 0 || (articleData.research_summary.contrarian_perspectives?.length || 0) > 0) ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive">
+                            <ShieldAlert size={20} />
+                          </div>
+                          <div>
+                            <h4 className="text-[14px] font-bold text-foreground">Critical & Contrarian Viewpoints</h4>
+                            <p className="text-[11px] text-muted">Bottlenecks, challenges, and alternative theories.</p>
+                          </div>
+                        </div>
+                        <div className="space-y-4 max-h-[300px] overflow-y-auto">
+                          {articleData.research_summary.hidden_challenges?.map((challenge, i) => (
+                            <div key={i} className="text-[13px] text-muted-dark border-l-4 border-destructive/20 pl-5 py-2 italic bg-destructive/5 rounded-r-2xl">
+                              <span className="font-bold text-[10px] uppercase text-destructive/60 block mb-1">Hidden Challenge</span>
+                              {typeof challenge === 'string' ? challenge : JSON.stringify(challenge)}
+                            </div>
+                          ))}
+                          {articleData.research_summary.contrarian_perspectives?.map((perspective, i) => (
+                            <div key={i} className="text-[13px] text-muted-dark border-l-4 border-primary/20 pl-5 py-2 bg-primary/5 rounded-r-2xl">
+                              <span className="font-bold text-[10px] uppercase text-primary/60 block mb-1">Contrarian View</span>
+                              {typeof perspective === 'string' ? perspective : JSON.stringify(perspective)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No critical perspectives found for this topic.</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Stakeholders Tab */}
+                {activeTab === 'stakeholders' && (
+                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    {(articleData.research_summary.stakeholders?.length || 0) > 0 ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                            <Users2 size={20} />
+                          </div>
+                          <div>
+                            <h4 className="text-[14px] font-bold text-foreground">Stakeholder Ecosystem</h4>
+                            <p className="text-[11px] text-muted">Key players and their economic incentives.</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 max-h-[300px] overflow-y-auto gap-3">
+                          {articleData.research_summary.stakeholders?.map((stakeholder, i) => {
+                            if (typeof stakeholder === 'string') {
+                              return (
+                                <p key={i} className="inline-flex px-4 py-2 rounded-2xl bg-primary/5 border border-primary/10 text-[12px] font-bold text-primary w-fit">
+                                  {stakeholder}
+                                </p>
+                              );
+                            }
+                            return (
+                              <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 hover:border-primary/30 transition-all group">
+                                <div className="font-bold text-[14px] text-foreground mb-3 flex items-center gap-3">
+                                  <div className="w-2 h-2 rounded-full bg-primary/40 shrink-0" />
+                                  {stakeholder.name}
                                 </div>
-                                <div className="pb-4">
-                                  <a
-                                    href={source.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[14px] font-bold text-foreground hover:text-primary transition-colors flex items-center gap-2 mb-1.5 underline decoration-border group-hover:decoration-primary/40 underline-offset-4"
-                                  >
-                                    {source.title}
-                                    <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                  </a>
-                                  <p className="text-[12px] text-muted-dark leading-relaxed line-clamp-2">
-                                    {source.description}
-                                  </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
+                                  <div className="space-y-1.5 p-3 rounded-xl bg-surface/40">
+                                    <span className="text-[10px] uppercase font-bold tracking-tight text-muted">Economic Incentive</span>
+                                    <p className="text-[12px] text-muted-dark leading-relaxed">{stakeholder.incentive}</p>
+                                  </div>
+                                  <div className="space-y-1.5 p-3 rounded-xl bg-destructive/5">
+                                    <span className="text-[10px] uppercase font-bold tracking-tight text-destructive/60">Potential Conflict</span>
+                                    <p className="text-[12px] text-muted-dark leading-relaxed">{stakeholder.conflict}</p>
+                                  </div>
                                 </div>
                               </div>
-                            ))}
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No stakeholders identified in the current research context.</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Examples Tab */}
+                {activeTab === 'examples' && (
+                  <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                    {(articleData.research_summary.examples?.length || 0) > 0 ? (
+                      <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
+                        <div className="flex items-center gap-3 mb-6">
+                          <div className="w-10 h-10 rounded-2xl bg-success/10 flex items-center justify-center text-success">
+                            <Lightbulb size={20} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-[14px] font-bold text-foreground">Comparative Examples</h4>
+                              <div className="group relative">
+                                <button className="p-1 rounded-full hover:bg-surface transition-colors text-muted hover:text-primary">
+                                  <Info size={14} />
+                                </button>
+                                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 p-3 bg-foreground text-background text-[10px] rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                                  <div className="space-y-2">
+                                    <p className="font-bold border-b border-background/20 pb-1 mb-2">Research Glossary</p>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-success" />
+                                      <span><strong>Success:</strong> Proven solution or positive case study.</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-red-400" />
+                                      <span><strong>Failure:</strong> Historical lesson or project bottleneck.</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-primary" />
+                                      <span><strong>Neutral:</strong> Key entity or strategic context point.</span>
+                                    </div>
+                                  </div>
+                                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-foreground" />
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-muted">Real-world case studies and success stories.</p>
                           </div>
                         </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No verified sources recorded for this report.</div>
-                      );
-                    })()}
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                          {articleData.research_summary.examples?.map((example, i) => {
+                            const isObject = typeof example === 'object' && example !== null;
+                            const type = isObject ? (example as Record<string, unknown>).type as string : 'Case Study';
+                            const scenario = isObject ? (example as Record<string, unknown>).scenario as string : example;
+
+                            return (
+                              <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 text-[13px] text-muted-dark hover:border-success/30 transition-all">
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="font-bold text-foreground text-[11px] uppercase tracking-wider">Example {i + 1}</span>
+                                  {isObject && (
+                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-tight ${type?.toLowerCase() === 'success' ? 'bg-success/10 text-success border border-success/20' :
+                                      type?.toLowerCase() === 'failure' ? 'bg-destructive/10 text-destructive border border-destructive/20' :
+                                        'bg-primary/10 text-primary border border-primary/20'
+                                      }`}>
+                                      {type}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="leading-relaxed">
+                                  {scenario}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-20 text-muted italic text-[12px]">No comparative examples found for this investigation.</div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Research & Intelligence Dashboard */}
-            {articleData?.research_summary && (
-              <div className="space-y-6 mt-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-                  <div className="px-4 py-1.5 rounded-full border border-border bg-surface/50 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
-                    Research Intelligence
-                  </div>
-                  <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
-                </div>
-
-                {/* Tab Navigation */}
-                <div className="flex items-center gap-1 p-1 rounded-xl bg-surface/40 border border-border/50 overflow-x-auto no-scrollbar">
-                  {[
-                    { id: 'facts', label: 'Core Facts', icon: CheckCircle2, color: 'text-success' },
-                    { id: 'stats', label: 'Statistics', icon: BarChart3, color: 'text-primary' },
-                    { id: 'trends', label: 'Trends', icon: Zap, color: 'text-warning' },
-                    { id: 'perspectives', label: 'Perspectives', icon: ShieldAlert, color: 'text-destructive' },
-                    { id: 'stakeholders', label: 'Stakeholders', icon: Users2, color: 'text-primary' },
-                    { id: 'examples', label: 'Examples', icon: Lightbulb, color: 'text-success' },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as 'facts' | 'stats' | 'trends' | 'perspectives' | 'stakeholders' | 'examples')}
-                      className={`w-full flex items-center justify-center border border-border/60 gap-2 px-4 py-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${activeTab === tab.id
-                        ? 'bg-background text-foreground'
-                        : 'text-muted hover:text-foreground hover:bg-background/40'
-                        }`}
-                    >
-                      <tab.icon size={14} className={activeTab === tab.id ? tab.color : 'text-muted/60'} />
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="h-auto">
-                  {/* Core Facts Tab */}
-                  {activeTab === 'facts' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {(articleData.research_summary.core_facts?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-success/10 flex items-center justify-center text-success">
-                              <CheckCircle2 size={20} />
-                            </div>
-                            <div>
-                              <h4 className="text-[14px] font-bold text-foreground">Core Investigative Facts</h4>
-                              <p className="text-[11px] text-muted">Primary verified data points discovered.</p>
-                            </div>
-                          </div>
-                          <ul className="max-h-[300px] overflow-y-auto">
-                            {articleData.research_summary.core_facts?.map((fact, i) => (
-                              <li key={i} className="text-[13px] text-muted-dark leading-relaxed flex items-start gap-3 p-2 rounded-2xl hover:bg-background/40 transition-colors">
-                                <span className="w-2 h-2 rounded-full bg-success/40 mt-1.5 shrink-0" />
-                                {typeof fact === 'string' ? fact : JSON.stringify(fact)}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No core facts available for this research stage.</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Statistics Tab */}
-                  {activeTab === 'stats' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {(articleData.research_summary.statistics?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                              <BarChart3 size={20} />
-                            </div>
-                            <div>
-                              <h4 className="text-[14px] font-bold text-foreground">Statistical Deep-Dive</h4>
-                              <p className="text-[11px] text-muted">Quantitative metrics and hard evidence.</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
-                            {articleData.research_summary.statistics?.map((stat, i) => (
-                              <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 text-[13px] text-primary font-medium hover:scale-[1.01] transition-transform">
-                                <span className="text-[10px] uppercase font-bold text-muted/60 block mb-1">Evidence Point {i + 1}</span>
-                                {typeof stat === 'string' ? stat : JSON.stringify(stat)}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No statistical data found during research.</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Trends Tab */}
-                  {activeTab === 'trends' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {(articleData.research_summary.trends?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-warning/10 flex items-center justify-center text-warning">
-                              <Zap size={20} />
-                            </div>
-                            <div>
-                              <h4 className="text-[14px] font-bold text-foreground">Emerging Trends</h4>
-                              <p className="text-[11px] text-muted">Future directions and market shifts discovered.</p>
-                            </div>
-                          </div>
-                          <div className="flex max-h-[300px] overflow-y-auto flex-wrap gap-3">
-                            {articleData.research_summary.trends?.map((trend, i) => (
-                              <span key={i} className="px-5 py-3 rounded-2xl bg-warning/5 border border-warning/10 text-[12px] font-bold text-warning-dark hover:bg-warning/10 transition-colors">
-                                {typeof trend === 'string' ? trend : JSON.stringify(trend)}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No emerging trends identified in this query.</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Perspectives Tab */}
-                  {activeTab === 'perspectives' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {((articleData.research_summary.hidden_challenges?.length || 0) > 0 || (articleData.research_summary.contrarian_perspectives?.length || 0) > 0) ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive">
-                              <ShieldAlert size={20} />
-                            </div>
-                            <div>
-                              <h4 className="text-[14px] font-bold text-foreground">Critical & Contrarian Viewpoints</h4>
-                              <p className="text-[11px] text-muted">Bottlenecks, challenges, and alternative theories.</p>
-                            </div>
-                          </div>
-                          <div className="space-y-4 max-h-[300px] overflow-y-auto">
-                            {articleData.research_summary.hidden_challenges?.map((challenge, i) => (
-                              <div key={i} className="text-[13px] text-muted-dark border-l-4 border-destructive/20 pl-5 py-2 italic bg-destructive/5 rounded-r-2xl">
-                                <span className="font-bold text-[10px] uppercase text-destructive/60 block mb-1">Hidden Challenge</span>
-                                {typeof challenge === 'string' ? challenge : JSON.stringify(challenge)}
-                              </div>
-                            ))}
-                            {articleData.research_summary.contrarian_perspectives?.map((perspective, i) => (
-                              <div key={i} className="text-[13px] text-muted-dark border-l-4 border-primary/20 pl-5 py-2 bg-primary/5 rounded-r-2xl">
-                                <span className="font-bold text-[10px] uppercase text-primary/60 block mb-1">Contrarian View</span>
-                                {typeof perspective === 'string' ? perspective : JSON.stringify(perspective)}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No critical perspectives found for this topic.</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Stakeholders Tab */}
-                  {activeTab === 'stakeholders' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {(articleData.research_summary.stakeholders?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                              <Users2 size={20} />
-                            </div>
-                            <div>
-                              <h4 className="text-[14px] font-bold text-foreground">Stakeholder Ecosystem</h4>
-                              <p className="text-[11px] text-muted">Key players and their economic incentives.</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-1 max-h-[300px] overflow-y-auto gap-3">
-                            {articleData.research_summary.stakeholders?.map((stakeholder, i) => {
-                              if (typeof stakeholder === 'string') {
-                                return (
-                                  <p key={i} className="inline-flex px-4 py-2 rounded-2xl bg-primary/5 border border-primary/10 text-[12px] font-bold text-primary w-fit">
-                                    {stakeholder}
-                                  </p>
-                                );
-                              }
-                              return (
-                                <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 hover:border-primary/30 transition-all group">
-                                  <div className="font-bold text-[14px] text-foreground mb-3 flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-primary/40 shrink-0" />
-                                    {stakeholder.name}
-                                  </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-4">
-                                    <div className="space-y-1.5 p-3 rounded-xl bg-surface/40">
-                                      <span className="text-[10px] uppercase font-bold tracking-tight text-muted">Economic Incentive</span>
-                                      <p className="text-[12px] text-muted-dark leading-relaxed">{stakeholder.incentive}</p>
-                                    </div>
-                                    <div className="space-y-1.5 p-3 rounded-xl bg-destructive/5">
-                                      <span className="text-[10px] uppercase font-bold tracking-tight text-destructive/60">Potential Conflict</span>
-                                      <p className="text-[12px] text-muted-dark leading-relaxed">{stakeholder.conflict}</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No stakeholders identified in the current research context.</div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Examples Tab */}
-                  {activeTab === 'examples' && (
-                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      {(articleData.research_summary.examples?.length || 0) > 0 ? (
-                        <div className="p-4 rounded-2xl bg-surface/30 border border-border/60">
-                          <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 rounded-2xl bg-success/10 flex items-center justify-center text-success">
-                              <Lightbulb size={20} />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-[14px] font-bold text-foreground">Comparative Examples</h4>
-                                <div className="group relative">
-                                  <button className="p-1 rounded-full hover:bg-surface transition-colors text-muted hover:text-primary">
-                                    <Info size={14} />
-                                  </button>
-                                  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 p-3 bg-foreground text-background text-[10px] rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
-                                    <div className="space-y-2">
-                                      <p className="font-bold border-b border-background/20 pb-1 mb-2">Research Glossary</p>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-success" />
-                                        <span><strong>Success:</strong> Proven solution or positive case study.</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-red-400" />
-                                        <span><strong>Failure:</strong> Historical lesson or project bottleneck.</span>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-primary" />
-                                        <span><strong>Neutral:</strong> Key entity or strategic context point.</span>
-                                      </div>
-                                    </div>
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-foreground" />
-                                  </div>
-                                </div>
-                              </div>
-                              <p className="text-[11px] text-muted">Real-world case studies and success stories.</p>
-                            </div>
-                          </div>
-                          <div className="space-y-3 max-h-[300px] overflow-y-auto">
-                            {articleData.research_summary.examples?.map((example, i) => {
-                              const isObject = typeof example === 'object' && example !== null;
-                              const type = isObject ? (example as Record<string, unknown>).type as string : 'Case Study';
-                              const scenario = isObject ? (example as Record<string, unknown>).scenario as string : example;
-
-                              return (
-                                <div key={i} className="p-5 rounded-2xl bg-background/40 border border-border/40 text-[13px] text-muted-dark hover:border-success/30 transition-all">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <span className="font-bold text-foreground text-[11px] uppercase tracking-wider">Example {i + 1}</span>
-                                    {isObject && (
-                                      <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-tight ${type?.toLowerCase() === 'success' ? 'bg-success/10 text-success border border-success/20' :
-                                        type?.toLowerCase() === 'failure' ? 'bg-destructive/10 text-destructive border border-destructive/20' :
-                                          'bg-primary/10 text-primary border border-primary/20'
-                                        }`}>
-                                        {type}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="leading-relaxed">
-                                    {scenario}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-muted italic text-[12px]">No comparative examples found for this investigation.</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
         {/* SEO Analyzer Sidebar */}
@@ -927,11 +994,11 @@ export default function ArticleEditor({
         )}
 
         <AnimatePresence>
-          {audioUrl && (
+          {audioUrl && isAudioPlayerOpen && (
             <AudioBriefingPlayer
               audioUrl={audioUrl}
               title={title}
-              onClose={() => setAudioUrl(null)}
+              onClose={() => setIsAudioPlayerOpen(false)}
             />
           )}
         </AnimatePresence>

@@ -37,6 +37,14 @@ export default function SocialMediaCutout({
         quality: 1.0,
         pixelRatio: 2,
         backgroundColor: platform === 'X' || platform === 'Instagram' ? '#000000' : '#ffffff',
+        filter: (node: any) => {
+          const tagName = node.tagName || '';
+          const href = node.href || '';
+          if (tagName === 'LINK' && href.includes('fonts.googleapis.com')) {
+            return false;
+          }
+          return true;
+        },
       });
       const link = document.createElement('a');
       link.download = `${platform.toLowerCase()}-cutout.png`;

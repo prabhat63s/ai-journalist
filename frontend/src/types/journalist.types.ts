@@ -9,10 +9,12 @@ export interface ArticleData {
   audit?: AuditReport | null;
   image_url?: string;
   social_kit?: SocialKit;
+  audio_briefing?: { script: string; audio_b64: string };
   versions?: ArticleData[];
   session_id?: string;
   language?: string;
   sources?: Array<{ title: string; url: string; description: string }>;
+  user_email?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -90,4 +92,13 @@ export interface Message {
   updatedAt?: number;
   versions?: ArticleData[];
   activeVersionIndex?: number;
+}
+export interface ArticleStats {
+  words: number;
+  chars: number;
+  sentences: number;
+  readability: number;
+  score: number;
+  readingTime: number;
+  keywords: [string, number][];
 }

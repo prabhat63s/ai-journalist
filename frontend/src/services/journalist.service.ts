@@ -140,6 +140,15 @@ export async function getReports(email: string): Promise<ArticleData[]> {
   return resp.json();
 }
 
+export async function getReport(id: string, email: string): Promise<ArticleData> {
+  const resp = await fetch(`${API_BASE}/api/journalist/reports/${id}?email=${encodeURIComponent(email)}`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+  if (!resp.ok) throw new Error(await getErrorMessage(resp, "Failed to fetch report from DB"));
+  return resp.json();
+}
+
 export async function getSessions(email: string): Promise<SessionEntry[]> {
   const resp = await fetch(`${API_BASE}/api/journalist/sessions?email=${encodeURIComponent(email)}`, {
     method: "GET",

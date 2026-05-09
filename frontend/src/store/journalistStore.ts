@@ -11,6 +11,7 @@ interface JournalistStore {
   selectedAssistantMsgId: string | null;
   showEditor: boolean;
   hasLoadedReports: boolean;
+  hasLoadedSessions: boolean;
 
   // Actions
   setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
@@ -34,8 +35,9 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
   activeReportId: null,
   activeSessionId: null,
   selectedAssistantMsgId: null,
-  showEditor: true,
+  showEditor: false,
   hasLoadedReports: false,
+  hasLoadedSessions: false,
 
   setMessages: (messages) => {
     if (typeof messages === 'function') {
@@ -53,7 +55,7 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
     }
   },
 
-  setDbSessions: (dbSessions) => set({ dbSessions }),
+  setDbSessions: (dbSessions) => set({ dbSessions, hasLoadedSessions: true }),
 
   setActiveReportId: (activeReportId) => set({ activeReportId }),
   setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
@@ -61,7 +63,7 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
   setShowEditor: (showEditor) => set({ showEditor }),
 
   loadSessions: async (email, force = false) => {
-    if (get().hasLoadedReports && !force) return;
+    if (get().hasLoadedSessions && !force) return;
     try {
       const { getSessions, getReports, getConversations } = await import('@/services/journalist.service');
       const [sessions, reports, conversations] = await Promise.all([
@@ -102,6 +104,7 @@ export const useJournalistStore = create<JournalistStore>((set, get) => ({
       set({ 
         dbSessions: sortedSessions, 
         dbReports: reports, 
+        hasLoadedSessions: true,
         hasLoadedReports: true 
       });
     } catch (err) {

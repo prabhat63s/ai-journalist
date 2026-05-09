@@ -9,4 +9,3 @@ export { NewspaperCutout } from '../editor';
 export { default as DataInsightChart } from './DataInsightChart';
 export { SEOAnalyzer } from './SEOAnalyzer';
 export { default as GeneratedImageCard } from './GeneratedImageCard';
-export { SmartChart } from './SmartChart';

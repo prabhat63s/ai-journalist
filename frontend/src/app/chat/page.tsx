@@ -7,7 +7,7 @@ import { ChatInput, ArticleEditor } from '@/components/journalist';
 import { ThemeToggle, StatusLoader, StyledMarkdownViewer } from '@/components/shared';
 import { useAuth } from '@/context/AuthContext';
 import { useJournalistStore } from '@/store';
-import { generateContent, saveConversation, generateImage, generateSocialKit, getConversation } from '@/services/journalist.service';
+import { generateContent, saveConversation, generateImage, generateSocialKit, getConversation, getReport } from '@/services/journalist.service';
 import { cn } from '@/lib/utils';
 import { Message, GroundingSource } from '@/types/journalist.types';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,7 +26,8 @@ export default function ChatPage() {
         selectedAssistantMsgId,
         setSelectedAssistantMsgId,
         showEditor,
-        setShowEditor
+        setShowEditor,
+        hasLoadedSessions
     } = useJournalistStore();
 
     const searchParams = useSearchParams();
@@ -63,58 +64,119 @@ export default function ChatPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
+    // Close preview when editor opens
+    useEffect(() => {
+        if (showEditor) setPreviewUrl(null);
+    }, [showEditor]);
+
+    // Load sessions on mount
+    useEffect(() => {
+        if (user && user.email) {
+            loadSessions(user.email);
+        }
+    }, [user, loadSessions]);
+
     // Load session messages when activeSessionId changes
     useEffect(() => {
         const loadSessionData = async () => {
-            if (activeSessionId && user?.email) {
-                // Only fetch if the session already exists in DB; skip for brand-new sessions
-                const existsInDb = dbSessionsRef.current.some((s: any) => s.session_id === activeSessionId);
-                if (!existsInDb) return;
-                try {
-                    const conv = await getConversation(activeSessionId, user.email);
-                    if (conv && conv.messages) {
-                        const formattedMessages: Message[] = conv.messages.map((m: any) => ({
-                            id: m.id,
-                            role: m.role,
-                            content: m.content,
-                            articleData: m.article_data ? {
-                                ...m.article_data,
-                                // Restore fields stripped before saving
-                                markdown_content: m.content,
-                                image_url: m.image_url ?? m.article_data.image_url,
-                                social_kit: m.social_kit ?? m.article_data.social_kit,
-                            } : undefined,
-                            imageUrl: m.image_url,
-                            socialKit: m.social_kit,
-                            updatedAt: new Date(m.created_at).getTime()
-                        }));
-                        setMessages(formattedMessages);
+            if (!activeSessionId) {
+                setMessages([]);
+                setSelectedAssistantMsgId(null);
+                return;
+            }
 
-                        // Auto-select the latest message with article data to show in editor
-                        const latestArticleMsg = [...formattedMessages].reverse().find(m => m.articleData);
-                        if (latestArticleMsg) {
-                            setSelectedAssistantMsgId(latestArticleMsg.id);
-                        } else {
-                            setSelectedAssistantMsgId(null);
+            // Skip fetching if we already have messages for this session in memory
+            // This prevents 404s when a new session is being generated but not yet saved
+            if (messages.length > 0) return;
+
+            if (user && user.email) {
+                // Allow loading if:
+                // 1. We have no messages 
+                // 2. Either history hasn't loaded yet (so we don't know if it's known) 
+                //    OR it IS a known session
+                const isKnownSession = (dbSessionsRef.current || []).some(s => s.session_id === activeSessionId);
+                
+                if (messages.length === 0 && (!hasLoadedSessions || isKnownSession)) {
+                    try {
+                        const conv = await getConversation(activeSessionId, user.email);
+                        if (conv && conv.messages) {
+                            const formattedMessages: Message[] = conv.messages.map((m: any) => ({
+                                id: m.id,
+                                role: m.role,
+                                content: m.content,
+                                articleData: m.article_data ? {
+                                    ...m.article_data,
+                                    markdown_content: m.content,
+                                    image_url: m.image_url ?? m.article_data.image_url,
+                                    social_kit: m.social_kit ?? m.article_data.social_kit,
+                                } : undefined,
+                                imageUrl: m.image_url,
+                                socialKit: m.social_kit,
+                                updatedAt: new Date(m.created_at).getTime()
+                            }));
+                            setMessages(formattedMessages);
+
+                            const latestArticleMsg = [...formattedMessages].reverse().find(m => m.articleData);
+                            if (latestArticleMsg) {
+                                setSelectedAssistantMsgId(latestArticleMsg.id);
+                            } else {
+                                setSelectedAssistantMsgId(null);
+                            }
                         }
-                    }
-                } catch (err: any) {
-                    console.error("Failed to load conversation:", err);
-                    if (err.message?.includes("not found") || err.message?.includes("404")) {
-                        setActiveSessionId(null);
-                        router.push('/chat');
+                    } catch (err: any) {
+                        console.error("Failed to load conversation:", err);
+                        setMessages([]);
+                        setSelectedAssistantMsgId(null);
+                        
+                        const isKnownSession = (dbSessionsRef.current || []).some(s => s.session_id === activeSessionId);
+                        
+                        const msg = err.message || "";
+                        // Only redirect if:
+                        // 1. It's a 404 error
+                        // 2. We have NO messages locally
+                        // 3. History HAS loaded and this session is definitely not in it
+                        if ((msg.includes("not found") || msg.includes("404") || msg.includes("Conversation not found")) && 
+                            messages.length === 0 && hasLoadedSessions && !isKnownSession) {
+                            setActiveSessionId(null);
+                            router.replace('/chat');
+                        }
                     }
                 }
             }
         };
         loadSessionData();
-    }, [activeSessionId, user?.email, setMessages]);
+    }, [activeSessionId, user, setMessages, router]);
+
+    // Fetch full report data when a message is selected (if missing research data AND editor is open)
+    useEffect(() => {
+        const fetchFullReport = async () => {
+            if (!selectedAssistantMsgId || !(user && user.email) || !showEditor) return;
+            
+            const msg = messages.find(m => m.id === selectedAssistantMsgId);
+            if (msg && msg.articleData && msg.articleData.id && !msg.articleData.research_summary) {
+                try {
+                    const fullReport = await getReport(msg.articleData.id, user.email);
+                    setMessages(prev => prev.map(m => 
+                        m.id === selectedAssistantMsgId 
+                        ? { ...m, articleData: { ...m.articleData, ...fullReport } } 
+                        : m
+                    ));
+                } catch (err) {
+                    console.error("Failed to fetch full report for editor:", err);
+                }
+            }
+        };
+        fetchFullReport();
+    }, [selectedAssistantMsgId, user, showEditor]);
 
     const handleSendMessage = async () => {
         if ((!input.trim() && sources.length === 0 && groundingSources.length === 0) || !user?.email || isLoading) return;
 
         const currentSessionId = activeSessionId || uuidv4();
-        if (!activeSessionId) setActiveSessionId(currentSessionId);
+        if (!activeSessionId) {
+            setActiveSessionId(currentSessionId);
+            router.replace(`/chat?session=${currentSessionId}`);
+        }
 
         const messageContent = input.trim() || (sources.length > 0 || groundingSources.length > 0 ? "Analyze the provided sources." : "");
         if (!messageContent && !user?.email) return;
@@ -242,7 +304,12 @@ export default function ChatPage() {
     };
 
     const onRewrite = (msg: Message) => {
-        setInput(`Refine and rewrite the following report for better clarity: \n\n${msg.content.slice(0, 500)}...`);
+        const prevUserMsg = [...messages].reverse().find(m => m.role === 'user' && messages.indexOf(m) < messages.findIndex(msgObj => msgObj.id === msg.id));
+        if (prevUserMsg) {
+            setInput(prevUserMsg.content);
+        } else {
+            setInput(`Refine and rewrite the following report for better clarity: \n\n${msg.content.slice(0, 500)}...`);
+        }
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
@@ -333,307 +400,312 @@ export default function ChatPage() {
                 {/* Left: Chat Panel */}
                 <div className={cn(
                     "flex flex-col border-r border-border/40 transition-all duration-300",
-                    currentArticleMsg && showEditor ? "w-full md:w-[350px]" : "w-full items-center"
+                    (currentArticleMsg && showEditor) || previewUrl ? "w-full md:w-[350px]" : "w-full items-center"
                 )}>
-                {/* Scrollable Content */}
-                <div className="flex-1 w-full overflow-y-auto hide-scrollbar">
-                    <div className={cn(
-                        "w-full px-4 transition-all duration-300",
-                        currentArticleMsg && showEditor ? "max-w-full" : "max-w-3xl mx-auto"
-                    )}>
-                        {messages.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center min-h-screen text-center py-20">
-                                <div className="mb-4 flex flex-col items-center">
-                                    <h1 className="text-[42px] font-serif font-medium text-[#1a1a1a] tracking-tight">
-                                        Good evening, {user?.name?.split(' ')[0] || 'Researcher'}
-                                    </h1>
-                                </div>
+                    {/* Scrollable Content */}
+                    <div className="flex-1 w-full overflow-y-auto hide-scrollbar">
+                        <div className={cn(
+                            "w-full px-4 transition-all duration-300",
+                            (currentArticleMsg && showEditor) || previewUrl ? "max-w-full" : "max-w-3xl mx-auto"
+                        )}>
+                            {messages.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center min-h-screen text-center py-20">
+                                    <div className="mb-4 flex flex-col items-center">
+                                        <h1 className="text-[42px] font-serif font-medium text-[#1a1a1a] dark:text-white tracking-tight">
+                                            Good {(() => {
+                                                const hour = new Date().getHours();
+                                                if (hour < 12) return 'Morning';
+                                                if (hour < 17) return 'Afternoon';
+                                                return 'Evening';
+                                            })()}, {user?.name?.split(' ')[0] || 'Researcher'}
+                                        </h1>
+                                    </div>
 
-                                <div className="w-full transform translate-y-2">
-                                    <ChatInput
-                                        input={input}
-                                        setInput={setInput}
-                                        onSend={handleSendMessage}
-                                        onStop={handleStop}
-                                        isLoading={isLoading}
-                                        email={user?.email || ""}
-                                        sources={sources}
-                                        setSources={setSources}
-                                        groundingSources={groundingSources}
-                                        setGroundingSources={setGroundingSources}
-                                        persona={persona}
-                                        setPersona={setPersona}
-                                        language={language}
-                                        setLanguage={setLanguage}
-                                        enableWebSearch={enableWebSearch}
-                                        setEnableWebSearch={setEnableWebSearch}
-                                    />
-                                </div>
+                                    <div className="w-full transform translate-y-2">
+                                        <ChatInput
+                                            input={input}
+                                            setInput={setInput}
+                                            onSend={handleSendMessage}
+                                            onStop={handleStop}
+                                            isLoading={isLoading}
+                                            email={user?.email || ""}
+                                            sources={sources}
+                                            setSources={setSources}
+                                            groundingSources={groundingSources}
+                                            setGroundingSources={setGroundingSources}
+                                            persona={persona}
+                                            setPersona={setPersona}
+                                            language={language}
+                                            setLanguage={setLanguage}
+                                            enableWebSearch={enableWebSearch}
+                                            setEnableWebSearch={setEnableWebSearch}
+                                        />
+                                    </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 px-4 w-full">
-                                    {[
-                                        {
-                                            text: "Investigate the impact of new semiconductor subsidies on India's hardware startups.",
-                                            icon: <Cpu size={20} />,
-                                            color: "blue"
-                                        },
-                                        {
-                                            text: "Analyze how the shift to EV is disrupting traditional auto-component hubs in Pune.",
-                                            icon: <Car size={20} />,
-                                            color: "purple"
-                                        },
-                                        {
-                                            text: "Draft an investigative report on the sustainability of green hydrogen in India's heavy industry.",
-                                            icon: <Leaf size={20} />,
-                                            color: "green"
-                                        },
-                                    ].map((s, i) => (
-                                        <motion.button
-                                            key={i}
-                                            initial={{ opacity: 0, y: 20 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: 0.1 * i, duration: 0.4 }}
-                                            onClick={() => setInput(s.text)}
-                                            className="group relative flex flex-col items-start p-4 rounded-2xl border border-border/40 bg-white hover:border-primary/30 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all text-left h-full"
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 px-4 w-full">
+                                        {[
+                                            {
+                                                text: "Investigate the impact of new semiconductor subsidies on India's hardware startups.",
+                                                icon: <Cpu size={20} />,
+                                                color: "blue"
+                                            },
+                                            {
+                                                text: "Analyze how the shift to EV is disrupting traditional auto-component hubs in Pune.",
+                                                icon: <Car size={20} />,
+                                                color: "purple"
+                                            },
+                                            {
+                                                text: "Draft an investigative report on the sustainability of green hydrogen in India's heavy industry.",
+                                                icon: <Leaf size={20} />,
+                                                color: "green"
+                                            },
+                                        ].map((s, i) => (
+                                            <motion.button
+                                                key={i}
+                                                initial={{ opacity: 0, y: 20 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.1 * i, duration: 0.4 }}
+                                                onClick={() => setInput(s.text)}
+                                                className="group relative flex flex-col items-start p-4 rounded-2xl border border-border/40 bg-white dark:bg-surface/10 hover:border-primary/30 hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all text-left h-full"
+                                            >
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110",
+                                                    s.color === 'blue' ? "bg-blue-50 text-blue-600 dark:bg-blue-500/10" :
+                                                        s.color === 'purple' ? "bg-purple-50 text-purple-600 dark:bg-purple-500/10" :
+                                                            "bg-green-50 text-green-600 dark:bg-green-500/10"
+                                                )}>
+                                                    {s.icon}
+                                                </div>
+                                                <span className="text-[14px] leading-relaxed text-[#444444] dark:text-muted group-hover:text-[#1a1a1a] dark:group-hover:text-white transition-colors">
+                                                    {s.text}
+                                                </span>
+                                                <div className="mt-auto pt-4 flex items-center text-[12px] font-bold text-primary opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0">
+                                                    Start Investigation
+                                                    <ArrowRight size={14} className="ml-1" />
+                                                </div>
+                                            </motion.button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    {messages.map((msg) => (
+                                        <div
+                                            key={msg.id}
+                                            onClick={() => msg.role === 'assistant' && msg.articleData && setSelectedAssistantMsgId(msg.id)}
+                                            className={cn(
+                                                "flex w-full group",
+                                                msg.role === 'user' ? "justify-end" : "justify-start"
+                                            )}
                                         >
                                             <div className={cn(
-                                                "w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110",
-                                                s.color === 'blue' ? "bg-blue-50 text-blue-600" :
-                                                    s.color === 'purple' ? "bg-purple-50 text-purple-600" :
-                                                        "bg-green-50 text-green-600"
+                                                msg.role === 'user' ? "ml-auto my-4 max-w-[85%]" : "flex-1 cursor-pointer"
                                             )}>
-                                                {s.icon}
+                                                {msg.pending ? (
+                                                    <StatusLoader statuses={msg.pendingStatuses || []} />
+                                                ) : (
+                                                    <div className={cn(
+                                                        "max-w-none p-4 rounded-2xl transition-all",
+                                                        msg.role === 'user' ? "bg-surface text-foreground" : "bg-transparent group-hover:bg-surface/30",
+                                                        selectedAssistantMsgId === msg.id && "bg-surface-hover/50 border-l-2 border-primary"
+                                                    )}>
+                                                        <StyledMarkdownViewer 
+                                                            markdown={msg.content} 
+                                                            onLinkClick={handleLinkClick}
+                                                        />
+                                                        {msg.articleData && !msg.pending && (
+                                                            <div className="flex w-full items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar mt-4 pb-1">
+                                                                <button
+                                                                    onClick={() => handleSpeech(msg)}
+                                                                    className="shrink-0 p-1.5 rounded-lg bg-foreground/10 border border-border/40 text-[10px] font-bold text-muted hover:text-foreground hover:border-primary/50 transition-all active:scale-95"
+                                                                >
+                                                                    {isSpeaking ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => onRewrite(msg)}
+                                                                    className="shrink-0 p-1.5 rounded-lg bg-foreground/10 border border-border/40 text-[10px] font-bold text-muted hover:text-foreground hover:border-primary/50 transition-all active:scale-95"
+                                                                >
+                                                                    <RotateCcw size={12} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => onGenerateImage(msg)}
+                                                                    disabled={isGenImage || !!msg.imageUrl}
+                                                                    className={`shrink-0 p-1.5 rounded-lg border text-[10px] font-bold transition-all active:scale-95 ${msg.imageUrl
+                                                                        ? "bg-success/5 border-success/20 text-success pointer-events-none"
+                                                                        : "bg-foreground/10 border-border/40 text-muted hover:text-foreground hover:border-primary/50"
+                                                                        }`}
+                                                                >
+                                                                    {isGenImage ? <Loader2 size={12} className="animate-spin" /> : (msg.imageUrl ? <Check size={12} /> : <ImageIcon size={12} />)}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => onGenerateSocialKit(msg)}
+                                                                    disabled={isGenKit || !!msg.socialKit}
+                                                                    title={msg.socialKit ? "Social kit created" : "Generate social media kit"}
+                                                                    className={`shrink-0 p-1.5 rounded-lg border text-[10px] font-bold transition-all active:scale-95 ${msg.socialKit
+                                                                        ? "bg-success/5 border-success/20 text-success pointer-events-none"
+                                                                        : "bg-foreground/10 border-border/40 text-muted hover:text-foreground hover:border-primary/50"
+                                                                        }`}
+                                                                >
+                                                                    {isGenKit ? <Loader2 size={12} className="animate-spin" /> : (msg.socialKit ? <Check size={12} /> : <Megaphone size={12} />)}
+                                                                </button>
+
+                                                                {/* Generation Timestamp */}
+                                                                <div className="ml-auto text-[10px] font-medium text-muted/50 tracking-tight">
+                                                                    {new Date(msg.articleData?.created_at || msg.updatedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <span className="text-[14px] leading-relaxed text-[#444444] group-hover:text-[#1a1a1a] transition-colors">
-                                                {s.text}
-                                            </span>
-                                            <div className="mt-auto pt-4 flex items-center text-[12px] font-bold text-primary opacity-0 group-hover:opacity-100 transition-all translate-y-1 group-hover:translate-y-0">
-                                                Start Investigation
-                                                <ArrowRight size={14} className="ml-1" />
-                                            </div>
-                                        </motion.button>
+                                        </div>
                                     ))}
                                 </div>
-                            </div>
-                        ) : (
-                            <div>
-                                {messages.map((msg) => (
-                                    <div
-                                        key={msg.id}
-                                        onClick={() => msg.role === 'assistant' && msg.articleData && setSelectedAssistantMsgId(msg.id)}
-                                        className={cn(
-                                            "flex w-full group",
-                                            msg.role === 'user' ? "justify-end" : "justify-start"
-                                        )}
-                                    >
-                                        <div className={cn(
-                                            msg.role === 'user' ? "ml-auto my-4 max-w-[85%]" : "flex-1 cursor-pointer"
-                                        )}>
-                                            {msg.pending ? (
-                                                <StatusLoader statuses={msg.pendingStatuses || []} />
-                                            ) : (
-                                                <div className={cn(
-                                                    "max-w-none p-4 rounded-2xl transition-all",
-                                                    msg.role === 'user' ? "bg-surface text-foreground" : "bg-transparent group-hover:bg-surface/30",
-                                                    selectedAssistantMsgId === msg.id && "bg-surface-hover/50 border-l-2 border-primary"
-                                                )}>
-                                                    <StyledMarkdownViewer 
-                                                        markdown={msg.content} 
-                                                        onLinkClick={handleLinkClick}
-                                                    />
-                                                    {msg.articleData && !msg.pending && (
-                                                        <div className="flex w-full items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar mt-4 pb-1">
-                                                            <button
-                                                                onClick={() => handleSpeech(msg)}
-                                                                className="shrink-0 p-1.5 rounded-lg bg-foreground/10 border border-border/40 text-[10px] font-bold text-muted hover:text-foreground hover:border-primary/50 transition-all active:scale-95"
-                                                            >
-                                                                {isSpeaking ? <VolumeX size={12} /> : <Volume2 size={12} />}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onRewrite(msg)}
-                                                                className="shrink-0 p-1.5 rounded-lg bg-foreground/10 border border-border/40 text-[10px] font-bold text-muted hover:text-foreground hover:border-primary/50 transition-all active:scale-95"
-                                                            >
-                                                                <RotateCcw size={12} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onGenerateImage(msg)}
-                                                                disabled={isGenImage || !!msg.imageUrl}
-                                                                className={`shrink-0 p-1.5 rounded-lg border text-[10px] font-bold transition-all active:scale-95 ${msg.imageUrl
-                                                                    ? "bg-success/5 border-success/20 text-success pointer-events-none"
-                                                                    : "bg-foreground/10 border-border/40 text-muted hover:text-foreground hover:border-primary/50"
-                                                                    }`}
-                                                            >
-                                                                {isGenImage ? <Loader2 size={12} className="animate-spin" /> : (msg.imageUrl ? <Check size={12} /> : <ImageIcon size={12} />)}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => onGenerateSocialKit(msg)}
-                                                                disabled={isGenKit || !!msg.socialKit}
-                                                                title={msg.socialKit ? "Social kit created" : "Generate social media kit"}
-                                                                className={`shrink-0 p-1.5 rounded-lg border text-[10px] font-bold transition-all active:scale-95 ${msg.socialKit
-                                                                    ? "bg-success/5 border-success/20 text-success pointer-events-none"
-                                                                    : "bg-foreground/10 border-border/40 text-muted hover:text-foreground hover:border-primary/50"
-                                                                    }`}
-                                                            >
-                                                                {isGenKit ? <Loader2 size={12} className="animate-spin" /> : (msg.socialKit ? <Check size={12} /> : <Megaphone size={12} />)}
-                                                            </button>
-
-                                                            {/* Generation Timestamp */}
-                                                            <div className="ml-auto text-[10px] font-medium text-muted/50 tracking-tight">
-                                                                {new Date(msg.articleData?.created_at || msg.updatedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <div ref={messagesEndRef} />
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
                     </div>
+
+                    {/* Bottom Input Area */}
+                    {messages.length > 0 && (
+                        <div className="w-full">
+                            <ChatInput
+                                input={input}
+                                setInput={setInput}
+                                onSend={handleSendMessage}
+                                onStop={handleStop}
+                                isLoading={isLoading}
+                                email={user?.email || ""}
+                                sources={sources}
+                                setSources={setSources}
+                                groundingSources={groundingSources}
+                                setGroundingSources={setGroundingSources}
+                                persona={persona}
+                                setPersona={setPersona}
+                                language={language}
+                                setLanguage={setLanguage}
+                                enableWebSearch={enableWebSearch}
+                                setEnableWebSearch={setEnableWebSearch}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                {/* Bottom Input Area */}
-                {messages.length > 0 && (
-                    <div className="w-full">
-                        <ChatInput
-                            input={input}
-                            setInput={setInput}
-                            onSend={handleSendMessage}
-                            onStop={handleStop}
-                            isLoading={isLoading}
-                            email={user?.email || ""}
-                            sources={sources}
-                            setSources={setSources}
-                            groundingSources={groundingSources}
-                            setGroundingSources={setGroundingSources}
-                            persona={persona}
-                            setPersona={setPersona}
-                            language={language}
-                            setLanguage={setLanguage}
-                            enableWebSearch={enableWebSearch}
-                            setEnableWebSearch={setEnableWebSearch}
-                        />
-                    </div>
-                )}
-            </div>
-
-            {/* Right Side: Article Editor or Link Preview */}
-            <AnimatePresence mode="wait">
-                {showEditor ? (
-                    <motion.div
-                        key="editor"
-                        initial={{ x: '100%' }}
-                        animate={{ x: 0 }}
-                        exit={{ x: '100%' }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="flex-1 flex flex-col min-w-0"
-                    >
-                        {currentArticleMsg && (
-                            <ArticleEditor
-                                id={currentArticleMsg.id}
-                                content={currentArticleMsg.articleData?.markdown_content || currentArticleMsg.content}
-                                imageUrl={currentArticleMsg.articleData?.image_url}
-                                socialKit={currentArticleMsg.articleData?.social_kit}
-                                audit={currentArticleMsg.articleData?.audit}
-                                sources={currentArticleMsg.articleData?.sources}
-                                articleData={currentArticleMsg.articleData}
-                                onSave={(newContent) => {
-                                    setMessages(messages.map(m =>
-                                        m.id === currentArticleMsg.id
-                                            ? { ...m, content: newContent, articleData: m.articleData ? { ...m.articleData, markdown_content: newContent } : undefined }
-                                            : m
-                                    ));
-                                }}
-                                onManualSave={handleManualSave}
-                                onGenerateImage={async (topic, category, articleContent, reportId) => {
-                                    if (!currentArticleMsg) return;
-                                    await onGenerateImage(currentArticleMsg);
-                                }}
-                                onGenerateSocialKit={async (content, reportId, options) => {
-                                    if (!currentArticleMsg || !activeSessionId) return;
-                                    setIsGenKit(true);
-                                    try {
-                                        const kit = await generateSocialKit(content, user?.email || "", reportId, options);
-                                        setMessages(prev => {
-                                            const updated = prev.map(m => m.id === currentArticleMsg.id ? {
-                                                ...m,
-                                                articleData: m.articleData ? { ...m.articleData, social_kit: kit } : undefined,
-                                                socialKit: kit
-                                            } : m);
-                                            saveConversation(activeSessionId, user?.email || "", updated, currentArticleMsg.articleData?.topic || "")
-                                                .catch(err => console.error("Failed to persist social kit:", err));
-                                            return updated;
-                                        });
-                                    } catch (err) {
-                                        console.error(err);
-                                    } finally {
-                                        setIsGenKit(false);
-                                    }
-                                }}
-                                isGeneratingSocialKit={isGenKit}
-                                persona={persona}
-                                email={user?.email || ""}
-                            />
-                        )}
-                    </motion.div>
-                ) : previewUrl ? (
-                    <motion.div
-                        key="preview"
-                        initial={{ x: '100%', opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: '100%', opacity: 0 }}
-                        transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                        className="w-full md:w-[40%] border-l border-border/40 bg-background flex flex-col z-40"
-                    >
-                        {/* Preview Header */}
-                        <div className="flex items-center justify-between p-3 border-b border-border/40 bg-surface/10">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className="p-2 rounded-lg bg-background border border-border/60">
-                                    <ExternalLink size={16} className="text-primary" />
+                {/* Right Side: Article Editor or Link Preview */}
+                <AnimatePresence mode="wait">
+                    {showEditor ? (
+                        <motion.div
+                            key="editor"
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="flex-1 flex flex-col min-w-0"
+                        >
+                            {currentArticleMsg && (
+                                <ArticleEditor
+                                    id={currentArticleMsg.id}
+                                    content={currentArticleMsg.articleData?.markdown_content || currentArticleMsg.content}
+                                    imageUrl={currentArticleMsg.articleData?.image_url}
+                                    socialKit={currentArticleMsg.articleData?.social_kit}
+                                    audit={currentArticleMsg.articleData?.audit}
+                                    sources={currentArticleMsg.articleData?.sources}
+                                    articleData={currentArticleMsg.articleData}
+                                    onSave={(newContent) => {
+                                        setMessages(messages.map(m =>
+                                            m.id === currentArticleMsg.id
+                                                ? { ...m, content: newContent, articleData: m.articleData ? { ...m.articleData, markdown_content: newContent } : undefined }
+                                                : m
+                                        ));
+                                    }}
+                                    onManualSave={handleManualSave}
+                                    onGenerateImage={async (topic, category, articleContent, reportId) => {
+                                        if (!currentArticleMsg) return;
+                                        await onGenerateImage(currentArticleMsg);
+                                    }}
+                                    onGenerateSocialKit={async (content, reportId, options) => {
+                                        if (!currentArticleMsg || !activeSessionId) return;
+                                        setIsGenKit(true);
+                                        try {
+                                            const kit = await generateSocialKit(content, user?.email || "", reportId, options);
+                                            setMessages(prev => {
+                                                const updated = prev.map(m => m.id === currentArticleMsg.id ? {
+                                                    ...m,
+                                                    articleData: m.articleData ? { ...m.articleData, social_kit: kit } : undefined,
+                                                    socialKit: kit
+                                                } : m);
+                                                saveConversation(activeSessionId, user?.email || "", updated, currentArticleMsg.articleData?.topic || "")
+                                                    .catch(err => console.error("Failed to persist social kit:", err));
+                                                return updated;
+                                            });
+                                        } catch (err) {
+                                            console.error(err);
+                                        } finally {
+                                            setIsGenKit(false);
+                                        }
+                                    }}
+                                    isGeneratingSocialKit={isGenKit}
+                                    persona={persona}
+                                    email={user?.email || ""}
+                                />
+                            )}
+                        </motion.div>
+                    ) : previewUrl ? (
+                        <motion.div
+                            key="preview"
+                            initial={{ x: '100%', opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: '100%', opacity: 0 }}
+                            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                            className="w-full md:w-[40%] border-l border-border/40 bg-background flex flex-col z-40"
+                        >
+                            {/* Preview Header */}
+                            <div className="flex items-center justify-between p-3 border-b border-border/40 bg-surface/10">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="p-2 rounded-lg bg-background border border-border/60">
+                                        <ExternalLink size={16} className="text-primary" />
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="text-[10px] font-bold text-muted-dark uppercase tracking-wider">Source Preview</span>
+                                        <span className="text-[12px] font-medium text-foreground truncate max-w-[200px] md:max-w-[400px]">{previewUrl}</span>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col min-w-0">
-                                    <span className="text-[10px] font-bold text-muted-dark uppercase tracking-wider">Source Preview</span>
-                                    <span className="text-[12px] font-medium text-foreground truncate max-w-[200px] md:max-w-[400px]">{previewUrl}</span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => window.open(previewUrl, '_blank')}
+                                        className="p-2 rounded-lg hover:bg-background transition-all text-muted-dark hover:text-primary"
+                                        title="Open in new tab"
+                                    >
+                                        <Maximize2 size={16} />
+                                    </button>
+                                    <button
+                                        onClick={() => setPreviewUrl(null)}
+                                        className="p-2 rounded-lg hover:bg-red-50 transition-all text-muted-dark hover:text-red-500"
+                                    >
+                                        <X size={18} />
+                                    </button>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => window.open(previewUrl, '_blank')}
-                                    className="p-2 rounded-lg hover:bg-background transition-all text-muted-dark hover:text-primary"
-                                    title="Open in new tab"
-                                >
-                                    <Maximize2 size={16} />
-                                </button>
-                                <button
-                                    onClick={() => setPreviewUrl(null)}
-                                    className="p-2 rounded-lg hover:bg-red-50 transition-all text-muted-dark hover:text-red-500"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-                        </div>
-                        {/* Iframe Content */}
-                        <div className="flex-1 bg-surface/5 relative overflow-hidden">
-                            <iframe 
-                                src={previewUrl} 
-                                className="w-full h-full border-none"
-                                title="Source Preview"
-                                sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-                            />
-                            {/* Security Warning Overlay (Behind iframe unless blocked) */}
-                            <div className="absolute inset-0 -z-10 flex flex-col items-center justify-center p-10 text-center select-none">
-                                <div className="p-4 rounded-full bg-border/10 mb-4">
-                                    <ShieldAlert size={48} className="text-muted-dark/30" />
+                            {/* Iframe Content */}
+                            <div className="flex-1 bg-surface/5 relative overflow-hidden">
+                                <iframe 
+                                    src={previewUrl} 
+                                    className="w-full h-full border-none"
+                                    title="Source Preview"
+                                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                                />
+                                {/* Security Warning Overlay (Behind iframe unless blocked) */}
+                                <div className="absolute inset-0 -z-10 flex flex-col items-center justify-center p-10 text-center select-none">
+                                    <div className="p-4 rounded-full bg-border/10 mb-4">
+                                        <ShieldAlert size={48} className="text-muted-dark/30" />
+                                    </div>
+                                    <p className="text-sm font-medium text-muted-dark">Link Preview restricted by source</p>
+                                    <p className="text-xs text-muted">Some websites prevent embedding for security. Use the external link icon above to view the full page.</p>
                                 </div>
-                                <p className="text-sm font-medium text-muted-dark">Link Preview restricted by source</p>
-                                <p className="text-xs text-muted">Some websites prevent embedding for security. Use the external link icon above to view the full page.</p>
                             </div>
-                        </div>
-                    </motion.div>
-                ) : null}
-            </AnimatePresence>
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>
             </div>
         </div>
     );

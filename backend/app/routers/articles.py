@@ -51,6 +51,7 @@ class ContentRequest(BaseModel):
 
 class AudioRequest(BaseModel):
     content: str
+    report_id: Optional[str] = None
 
 
 class TranslateRequest(BaseModel):
@@ -211,6 +212,22 @@ async def generate_audio_briefing(
     try:
         script = await llm_svc.generate_audio_briefing_script(request_body.content)
         audio_b64 = await call_sarvam_tts(script[:500])
+        
+        # Persist audio briefing back to the report if a report_id was provided
+        if request_body.report_id:
+            await db.db.reports.update_one(
+                {"id": str(request_body.report_id), "user_email": email.lower()},
+                {
+                    "$set": {
+                        "audio_briefing": {
+                            "script": script,
+                            "audio_b64": audio_b64
+                        },
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }
+                },
+            )
+            
         return {"audio_b64": audio_b64, "script": script}
     except HTTPException:
         raise
@@ -265,6 +282,15 @@ async def list_reports(email: str = Depends(get_current_user)):
     for r in reports:
         r["_id"] = str(r["_id"])
     return reports
+
+
+@router.get("/reports/{report_id}")
+async def get_report(report_id: str, email: str = Depends(get_current_user)):
+    report = await db.db.reports.find_one({"id": report_id, "user_email": email.lower()})
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report["_id"] = str(report["_id"])
+    return report
 
 
 @router.delete("/reports/{report_id}")

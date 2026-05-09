@@ -30,7 +30,7 @@ const NavItem = ({ icon, label, active, badge, isOpen, onClick }: NavItemProps) 
   <button 
     onClick={onClick}
     className={cn(
-      "w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 group",
+      "w-full flex items-center justify-between p-2 rounded-lg transition-all duration-200 group",
       active ? "bg-surface-hover text-foreground" : "text-muted-dark hover:bg-surface-hover/50",
       !isOpen && "justify-center px-0"
     )}
@@ -80,8 +80,16 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   }, [user, loadSessions]);
 
   const handleNewChat = () => {
-    clearSession();
-    router.push('/chat');
+    const searchParams = new URLSearchParams(window.location.search);
+    const sessionIdParam = searchParams.get('session');
+    
+    if (pathname === '/chat' && !sessionIdParam) {
+      // Already on new chat, just clear state to be sure
+      clearSession();
+    } else {
+      // Navigate to /chat which will trigger the sync effect in ChatPage
+      router.push('/chat');
+    }
   };
 
   const handleSessionClick = (sessionId: string) => {
@@ -131,12 +139,12 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     <motion.aside 
       initial={false}
       animate={{ 
-        width: isOpen ? 260 : 60,
+        width: isOpen ? 260 : 50,
       }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="h-screen bg-background border-r border-border/40 flex flex-col overflow-hidden relative"
     >
-      <div className={cn("flex flex-col h-full", isOpen ? "w-[260px]" : "w-[60px]")}>
+      <div className={cn("flex flex-col h-full", isOpen ? "w-[260px]" : "w-[50px]")}>
         {/* Top Header */}
         <div className={cn("p-2 flex items-center justify-between", !isOpen && "justify-center px-0")}>
           {isOpen && <h1 className="text-[22px] font-semibold text-foreground font-serif tracking-tight ml-2">AI Journalist</h1>}
@@ -149,7 +157,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
         </div>
 
         {/* Main Navigation */}
-        <div className={cn("px-2 space-y-0.5 mt-2", !isOpen && "px-3")}>
+        <div className={cn("px-2 space-y-0.5 mt-2")}>
           <NavItem 
             icon={<Plus size={20} strokeWidth={1.5} />} 
             label="New chat" 
