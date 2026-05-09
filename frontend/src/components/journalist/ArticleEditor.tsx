@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import {
   Copy,
@@ -59,8 +59,8 @@ interface ArticleEditorProps {
   onClose?: () => void;
   onStatsChange?: (stats: { words: number; readingTime: number; score: number }) => void;
   onImageUpdate?: (url: string) => void;
-  onGenerateImage?: (topic: string, category: string, articleContent?: string, reportId?: number) => Promise<void>;
-  onGenerateSocialKit?: (content: string, reportId?: number, options?: { platforms: string[], moreHashtags: boolean, prompt?: string }) => Promise<void>;
+  onGenerateImage?: (topic: string, category: string, articleContent?: string, reportId?: string) => Promise<void>;
+  onGenerateSocialKit?: (content: string, reportId?: string, options?: { platforms: string[], moreHashtags: boolean, prompt?: string }) => Promise<void>;
   isGeneratingSocialKit?: boolean;
   onManualSave?: (content: string) => Promise<void>;
   isSaving?: boolean;
@@ -102,6 +102,13 @@ export default function ArticleEditor({
   const [modalType, setModalType] = useState<'link' | 'image' | 'language'>('link');
   const [modalUrl, setModalUrl] = useState("");
   const [viewMode, setViewMode] = useState<'editor' | 'newspaper' | 'social'>('editor');
+  const prevSocialKitRef = useRef(socialKit);
+  useEffect(() => {
+    if (socialKit && !prevSocialKitRef.current) {
+      setViewMode('social');
+    }
+    prevSocialKitRef.current = socialKit;
+  }, [socialKit]);
   const [showSEO, setShowSEO] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);

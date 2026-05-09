@@ -80,8 +80,8 @@ export function SmartChart({ data, title }: SmartChartProps) {
         </div>
       </div>
 
-      <div className="h-[280px] w-full relative z-10">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="w-full relative z-10" style={{ minWidth: 0 }}>
+        <ResponsiveContainer width="100%" height={280}>
           {chartType === 'bar' ? (
             <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <XAxis

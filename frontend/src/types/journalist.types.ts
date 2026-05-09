@@ -1,5 +1,5 @@
 export interface ArticleData {
-  id?: number;
+  id?: string;
   topic: string;
   category: string;
   markdown_content: string;
@@ -19,7 +19,7 @@ export interface ArticleData {
 
 export interface SessionEntry {
   session_id: string | null;
-  latest_report_id: number;
+  latest_report_id: string | number;
   topic: string;
   category: string;
   version_count: number;

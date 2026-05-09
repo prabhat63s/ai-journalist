@@ -48,6 +48,8 @@ export default function ChatPage() {
 
     const abortControllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const dbSessionsRef = useRef(dbSessions);
+    useEffect(() => { dbSessionsRef.current = dbSessions; }, [dbSessions]);
 
     // Sync with URL session param
     useEffect(() => {
@@ -65,8 +67,9 @@ export default function ChatPage() {
     useEffect(() => {
         const loadSessionData = async () => {
             if (activeSessionId && user?.email) {
-                // If messages already belong to this session, don't reload unless force is needed
-                // This is a simple heuristic; a better one would track the loaded session ID
+                // Only fetch if the session already exists in DB; skip for brand-new sessions
+                const existsInDb = dbSessionsRef.current.some((s: any) => s.session_id === activeSessionId);
+                if (!existsInDb) return;
                 try {
                     const conv = await getConversation(activeSessionId, user.email);
                     if (conv && conv.messages) {
@@ -74,7 +77,13 @@ export default function ChatPage() {
                             id: m.id,
                             role: m.role,
                             content: m.content,
-                            articleData: m.article_data,
+                            articleData: m.article_data ? {
+                                ...m.article_data,
+                                // Restore fields stripped before saving
+                                markdown_content: m.content,
+                                image_url: m.image_url ?? m.article_data.image_url,
+                                social_kit: m.social_kit ?? m.article_data.social_kit,
+                            } : undefined,
                             imageUrl: m.image_url,
                             socialKit: m.social_kit,
                             updatedAt: new Date(m.created_at).getTime()
@@ -176,15 +185,15 @@ export default function ChatPage() {
                 updatedAt: Date.now()
             };
 
-            setMessages((prev) => {
-                const newMessages = prev.map(m => m.id === assistantMessageId ? finalAssistantMessage : m);
-                // Background save
-                saveConversation(currentSessionId, user.email, newMessages, result.topic || input.slice(0, 30));
-                return newMessages;
+            // Compute the final messages list and save to DB
+            setMessages(prev => {
+                const updated = prev.map(m => m.id === assistantMessageId ? finalAssistantMessage : m);
+                // Persist asynchronously; errors logged but don't block UI
+                saveConversation(currentSessionId, user.email, updated, result.topic || input.slice(0, 30))
+                    .then(() => loadSessions(user.email, true))
+                    .catch(err => console.error("Failed to save conversation:", err));
+                return updated;
             });
-
-            // Refresh sessions list in sidebar
-            loadSessions(user.email, true);
 
         } catch (err: any) {
             if (err.name === 'AbortError') return;
@@ -205,8 +214,19 @@ export default function ChatPage() {
     };
 
     const handleManualSave = async (content: string) => {
-        // Implementation for manual save
-        console.log("Saving content:", content);
+        if (!user?.email || !activeSessionId || !selectedAssistantMsgId) return;
+        // Update the message content in state then persist the whole conversation
+        setMessages(prev => {
+            const updated = prev.map(m => m.id === selectedAssistantMsgId
+                ? { ...m, content, articleData: m.articleData ? { ...m.articleData, markdown_content: content } : undefined }
+                : m
+            );
+            const editedMsg = updated.find(m => m.id === selectedAssistantMsgId);
+            const topic = editedMsg?.articleData?.topic || "";
+            saveConversation(activeSessionId, user.email, updated, topic)
+                .catch(err => console.error("Failed to persist manual save:", err));
+            return updated;
+        });
     };
 
     const handleSpeech = (msg: Message) => {
@@ -227,15 +247,20 @@ export default function ChatPage() {
     };
 
     const onGenerateImage = async (msg: Message) => {
-        if (!user?.email || !msg.articleData) return;
+        if (!user?.email || !msg.articleData || !activeSessionId) return;
         setIsGenImage(true);
         try {
             const url = await generateImage(msg.articleData.topic || "Investigation", "News", user.email, msg.content, msg.articleData.id);
-            setMessages(prev => prev.map(m => m.id === msg.id ? {
-                ...m,
-                articleData: m.articleData ? { ...m.articleData, image_url: url } : undefined,
-                imageUrl: url
-            } : m));
+            setMessages(prev => {
+                const updated = prev.map(m => m.id === msg.id ? {
+                    ...m,
+                    articleData: m.articleData ? { ...m.articleData, image_url: url } : undefined,
+                    imageUrl: url
+                } : m);
+                saveConversation(activeSessionId, user.email, updated, msg.articleData?.topic || "")
+                    .catch(err => console.error("Failed to save image to conversation:", err));
+                return updated;
+            });
         } catch (err) {
             console.error(err);
         } finally {
@@ -244,15 +269,20 @@ export default function ChatPage() {
     };
 
     const onGenerateSocialKit = async (msg: Message) => {
-        if (!user?.email || !msg.articleData) return;
+        if (!user?.email || !msg.articleData || !activeSessionId) return;
         setIsGenKit(true);
         try {
             const kit = await generateSocialKit(msg.content, user.email, msg.articleData.id);
-            setMessages(prev => prev.map(m => m.id === msg.id ? {
-                ...m,
-                articleData: m.articleData ? { ...m.articleData, social_kit: kit } : undefined,
-                socialKit: kit
-            } : m));
+            setMessages(prev => {
+                const updated = prev.map(m => m.id === msg.id ? {
+                    ...m,
+                    articleData: m.articleData ? { ...m.articleData, social_kit: kit } : undefined,
+                    socialKit: kit
+                } : m);
+                saveConversation(activeSessionId, user.email, updated, msg.articleData?.topic || "")
+                    .catch(err => console.error("Failed to save social kit to conversation:", err));
+                return updated;
+            });
         } catch (err) {
             console.error(err);
         } finally {
@@ -522,15 +552,20 @@ export default function ChatPage() {
                                     await onGenerateImage(currentArticleMsg);
                                 }}
                                 onGenerateSocialKit={async (content, reportId, options) => {
-                                    if (!currentArticleMsg) return;
+                                    if (!currentArticleMsg || !activeSessionId) return;
                                     setIsGenKit(true);
                                     try {
                                         const kit = await generateSocialKit(content, user?.email || "", reportId, options);
-                                        setMessages(prev => prev.map(m => m.id === currentArticleMsg.id ? {
-                                            ...m,
-                                            articleData: m.articleData ? { ...m.articleData, social_kit: kit } : undefined,
-                                            socialKit: kit
-                                        } : m));
+                                        setMessages(prev => {
+                                            const updated = prev.map(m => m.id === currentArticleMsg.id ? {
+                                                ...m,
+                                                articleData: m.articleData ? { ...m.articleData, social_kit: kit } : undefined,
+                                                socialKit: kit
+                                            } : m);
+                                            saveConversation(activeSessionId, user?.email || "", updated, currentArticleMsg.articleData?.topic || "")
+                                                .catch(err => console.error("Failed to persist social kit:", err));
+                                            return updated;
+                                        });
                                     } catch (err) {
                                         console.error(err);
                                     } finally {

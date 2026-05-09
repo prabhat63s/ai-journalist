@@ -6,7 +6,7 @@ interface JournalistStore {
   messages: Message[];
   dbReports: ArticleData[];       // full reports, used when restoring a session
   dbSessions: SessionEntry[];     // deduplicated sessions from backend, used for history panel
-  activeReportId: number | null;
+  activeReportId: string | null;
   activeSessionId: string | null;
   selectedAssistantMsgId: string | null;
   showEditor: boolean;
@@ -16,7 +16,7 @@ interface JournalistStore {
   setMessages: (messages: Message[] | ((prev: Message[]) => Message[])) => void;
   setDbReports: (reports: ArticleData[] | ((prev: ArticleData[]) => ArticleData[])) => void;
   setDbSessions: (sessions: SessionEntry[]) => void;
-  setActiveReportId: (id: number | null) => void;
+  setActiveReportId: (id: string | null) => void;
   setActiveSessionId: (id: string | null) => void;
   setSelectedAssistantMsgId: (id: string | null) => void;
   setShowEditor: (show: boolean) => void;

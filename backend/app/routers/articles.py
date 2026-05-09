@@ -146,11 +146,20 @@ async def generate_image(
 
     category = request.get("category", "General")
     article_content = request.get("article_content")
+    report_id = request.get("report_id")
 
     logger.info(f"articles: generate image topic='{topic}'")
     gemini_svc, _ = _pipeline.make_services()
     try:
         image_url = await gemini_svc.generate_cover_image(topic, category, article_content)
+
+        # Persist image_url back to the report if a report_id was provided
+        if report_id:
+            await db.db.reports.update_one(
+                {"id": str(report_id), "user_email": email.lower()},
+                {"$set": {"image_url": image_url, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+
         return {"image_url": image_url}
     except HTTPException:
         raise
@@ -167,12 +176,23 @@ async def generate_social_kit(
     if not article_content:
         raise HTTPException(status_code=400, detail="article_content is required")
 
+    report_id = request.get("report_id")
+
     logger.info(f"articles: generate social kit user={email}")
     _, llm_svc = _pipeline.make_services()
     if not llm_svc:
         raise HTTPException(status_code=400, detail="No AI provider key configured")
     try:
-        return await llm_svc.generate_social_kit(article_content)
+        kit = await llm_svc.generate_social_kit(article_content)
+
+        # Persist social_kit back to the report if a report_id was provided
+        if report_id:
+            await db.db.reports.update_one(
+                {"id": str(report_id), "user_email": email.lower()},
+                {"$set": {"social_kit": kit, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+
+        return kit
     except HTTPException:
         raise
     except Exception as exc:

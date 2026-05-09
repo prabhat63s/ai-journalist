@@ -87,7 +87,7 @@ class JournalistLLM:
     PROVIDER_MODELS = {
         "openai":   ("gpt-4o",                    "gpt-4o-mini"),
         "mistral":  ("mistral-large-latest",       "mistral-small-latest"),
-        "gemini":   ("gemini-1.5-flash",           "gemini-1.5-flash"),
+        "gemini":   ("gemini-3.1-flash-lite",           "gemini-3.1-flash-lite"),
     }
 
     def __init__(self, provider: str, api_key: str):

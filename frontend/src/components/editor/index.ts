@@ -61,10 +61,8 @@ export const Citation = Node.create({
 });
 
 export const defaultExtensions = [
-  StarterKit.configure({
-    // Some StarterKits include a basic link handling, we ensure it doesn't conflict
-  }),
-  Markdown,
+  StarterKit.configure({ link: false, underline: false }),
+  Markdown.configure(),
   Citation,
   Link.configure({
     openOnClick: false,

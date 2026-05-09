@@ -99,7 +99,7 @@ export async function uploadFile(file: File, email: string): Promise<GroundingSo
   return resp.json();
 }
 
-export async function generateImage(topic: string, category: string, email: string, articleContent?: string, reportId?: number): Promise<string> {
+export async function generateImage(topic: string, category: string, email: string, articleContent?: string, reportId?: string): Promise<string> {
   const resp = await fetch(`${API_BASE}/api/journalist/generate-image?email=${encodeURIComponent(email)}`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -115,7 +115,7 @@ export async function generateImage(topic: string, category: string, email: stri
   return data.image_url || "";
 }
 
-export async function generateSocialKit(articleContent: string, email: string, reportId?: number, options?: { platforms: string[], moreHashtags: boolean, prompt?: string }): Promise<SocialKit> {
+export async function generateSocialKit(articleContent: string, email: string, reportId?: string, options?: { platforms: string[], moreHashtags: boolean, prompt?: string }): Promise<SocialKit> {
   const resp = await fetch(`${API_BASE}/api/journalist/generate-social-kit?email=${encodeURIComponent(email)}`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -149,7 +149,7 @@ export async function getSessions(email: string): Promise<SessionEntry[]> {
   return resp.json();
 }
 
-export async function deleteReport(id: number, email: string): Promise<void> {
+export async function deleteReport(id: string, email: string): Promise<void> {
   const resp = await fetch(`${API_BASE}/api/journalist/reports/${id}?email=${encodeURIComponent(email)}`, {
     method: "DELETE",
     headers: getAuthHeaders(),
@@ -157,7 +157,7 @@ export async function deleteReport(id: number, email: string): Promise<void> {
   if (!resp.ok) throw new Error(await getErrorMessage(resp, "Failed to delete report from DB"));
 }
 
-export async function saveReport(id: number, email: string, content: string, topic?: string, category?: string): Promise<{ id: number, version_count: number }> {
+export async function saveReport(id: string, email: string, content: string, topic?: string, category?: string): Promise<{ id: string, version_count: number }> {
   const resp = await fetch(`${API_BASE}/api/journalist/reports/${id}/save?email=${encodeURIComponent(email)}`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -184,7 +184,7 @@ export async function translateArticle(
 export async function generateAudioBriefing(
   content: string,
   email: string,
-  reportId?: number
+  reportId?: string
 ): Promise<{ audio_b64: string; script: string }> {
   const resp = await fetch(`${API_BASE}/api/journalist/generate-audio?email=${encodeURIComponent(email)}`, {
     method: "POST",
@@ -224,15 +224,22 @@ export async function saveConversation(id: string, email: string, messages: any[
       user_email: email,
       title,
       category,
-      messages: messages.map(m => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        article_data: m.articleData,
-        image_url: m.imageUrl,
-        social_kit: m.socialKit,
-        created_at: m.updatedAt ? new Date(m.updatedAt).toISOString() : new Date().toISOString()
-      }))
+      messages: messages.map(m => {
+        // Strip heavy fields from article_data before saving:
+        // - markdown_content: already stored in message.content
+        // - research_summary / outline: large, already in reports collection
+        // - image_url inside article_data: base64 string (can be 500KB+), stored separately in image_url field
+        const { markdown_content, research_summary, outline, image_url: _img, ...slimArticleData } = m.articleData || {};
+        return {
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          article_data: m.articleData ? slimArticleData : null,
+          image_url: m.imageUrl ?? m.articleData?.image_url ?? null,
+          social_kit: m.socialKit ?? m.articleData?.social_kit ?? null,
+          created_at: m.updatedAt ? new Date(m.updatedAt).toISOString() : new Date().toISOString()
+        };
+      })
     }),
   });
   if (!resp.ok) throw new Error("Failed to save conversation");
