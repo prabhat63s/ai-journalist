@@ -397,9 +397,10 @@ Return ONLY this JSON structure:
   "stakeholders": ["stakeholder + role 1", "stakeholder + role 2"],
   "examples": ["example1", "example2"],
   "data_insights": [
-    {{"label": "Metric name", "value": 0.0, "context": "Short context"}}
+    {{"label": "Metric name (e.g., Growth Rate)", "formatted_value": "$1.2B", "progress": 75, "value": 1200000000, "context": "One-sentence context about this specific data point"}}
   ]
 }}
+CRITICAL: For 'data_insights', focus on HARD NUMBERS and PERCENTAGES found in the research. These will be used for charts.
 All text values MUST be in {language}.
 """
 

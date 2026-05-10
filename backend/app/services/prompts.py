@@ -24,10 +24,11 @@ Include:
 5. Hidden challenges (2-3 bottlenecks)
 6. Key stakeholders (2-3 with brief roles)
 7. Real-world examples (2-3 brief success or failure cases)
+8. Data Insights (3-5 key metrics with labels, numeric values, and brief context for visualization)
 
 CRITICAL: Return ONLY valid minified JSON. No markdown. No preamble. No extra explanation.
 Keep all string values under 200 characters each. Limit the entire response to under 3000 tokens.
-{{"core_facts":[],"statistics":[],"trends":[],"contrarian_perspectives":[],"hidden_challenges":[],"stakeholders":[],"examples":[],"data_insights":[{{"label":"Metric name","value":0.0,"context":"Short context"}}],"sources":[{{"title":"Source name","url":"https://example.com","description":"1-sentence blurb"}}]}}
+{{"core_facts":[],"statistics":[],"trends":[],"contrarian_perspectives":[],"hidden_challenges":[],"stakeholders":[],"examples":[],"data_insights":[{{"label":"Metric name","formatted_value":"$1.2B","progress":75,"value":1200000000,"context":"Short context"}}],"sources":[{{"title":"Source name","url":"https://example.com","description":"1-sentence blurb"}}]}}
 """
 
 

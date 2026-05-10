@@ -20,7 +20,7 @@ interface SocialMediaCutoutProps {
 export default function SocialMediaCutout({
   platform,
   content,
-  authorName = "MightyClaw AI",
+  authorName = "Slate",
   authorHandle = "@mightyclaw_ai",
   authorAvatar = "https://api.dicebear.com/7.x/bottts/svg?seed=mightyclaw",
   date = "2h",
@@ -325,7 +325,7 @@ export default function SocialMediaCutout({
         <div className="text-[12px] text-gray-400 mb-4 font-sans tracking-wide">ISSUE #042 • {new Date().toLocaleDateString()}</div>
         
         <h1 className="text-2xl font-bold mb-6 leading-tight border-b-2 border-primary/20 pb-4">
-          Insights from the MightyClaw AI Network
+          Insights from the Slate Network
         </h1>
 
         <div className="text-[15px] leading-relaxed mb-6 whitespace-pre-wrap">
@@ -347,7 +347,7 @@ export default function SocialMediaCutout({
       </div>
 
       <div className="p-6 text-center text-[11px] text-gray-400 font-sans border-t border-gray-100">
-        Sent with ⚡ by MightyClaw AI • <span className="underline cursor-pointer">Unsubscribe</span>
+        Sent with ⚡ by Slate • <span className="underline cursor-pointer">Unsubscribe</span>
       </div>
     </motion.div>
   );

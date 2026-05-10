@@ -575,9 +575,18 @@ export default function ArticleEditor({
                               </div>
                               <div className="flex items-baseline gap-0.5">
                                 <span className="text-lg font-black text-primary tabular-nums">
-                                  {insight.value}
+                                  {insight.formatted_value || 
+                                    (typeof insight.value === 'number' 
+                                      ? (insight.value >= 1e9 ? (insight.value / 1e9).toFixed(1) + 'B' 
+                                        : insight.value >= 1e6 ? (insight.value / 1e6).toFixed(1) + 'M' 
+                                        : insight.value >= 1e3 ? (insight.value / 1e3).toFixed(1) + 'K' 
+                                        : insight.value)
+                                      : insight.value)
+                                  }
                                 </span>
-                                <span className="text-[10px] font-bold text-primary/60">%</span>
+                                {!insight.formatted_value && insight.value <= 100 && typeof insight.value === 'number' && (
+                                  <span className="text-[10px] font-bold text-primary/60">%</span>
+                                )}
                               </div>
                             </div>
 
@@ -585,7 +594,7 @@ export default function ArticleEditor({
                             <div className="h-1 w-full bg-border/30 rounded-full overflow-hidden mb-3">
                               <motion.div
                                 initial={{ width: 0 }}
-                                animate={{ width: `${insight.value}%` }}
+                                animate={{ width: `${Math.min(100, Math.max(0, insight.progress ?? (typeof insight.value === 'number' ? insight.value : 0)))}%` }}
                                 transition={{ duration: 1, ease: "easeOut" }}
                                 className="h-full bg-linear-to-r from-primary/80 to-primary"
                               />
