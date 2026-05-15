@@ -12,8 +12,9 @@ import { cn } from '@/lib/utils';
 import { Message, GroundingSource } from '@/types/journalist.types';
 import { v4 as uuidv4 } from 'uuid';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense } from 'react';
 
-export default function ChatPage() {
+function ChatContent() {
     const { user } = useAuth();
     const router = useRouter();
     const {
@@ -716,5 +717,17 @@ export default function ChatPage() {
                 </AnimatePresence>
             </div>
         </div>
+    );
+}
+
+export default function ChatPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex-1 flex items-center justify-center bg-background">
+                <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
+            </div>
+        }>
+            <ChatContent />
+        </Suspense>
     );
 }

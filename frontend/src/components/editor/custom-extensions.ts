@@ -1,5 +1,26 @@
 import { Extension } from '@tiptap/core';
 
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    /**
+     * Indent the selection.
+     */
+    indent: () => ReturnType;
+    /**
+     * Outdent the selection.
+     */
+    outdent: () => ReturnType;
+    /**
+     * Set the line height.
+     */
+    setLineHeight: (lineHeight: string) => ReturnType;
+    /**
+     * Unset the line height.
+     */
+    unsetLineHeight: () => ReturnType;
+  }
+}
+
 export const Indent = Extension.create({
   name: 'indent',
 
@@ -34,11 +55,11 @@ export const Indent = Extension.create({
     ]
   },
 
-  addCommands() {
+  addCommands(): any {
     return {
-      indent: () => ({ tr, state, dispatch }) => {
+      indent: () => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
-        tr.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+        tr.doc.nodesBetween(selection.from, selection.to, (node: any, pos: number) => {
           if (this.options.types.includes(node.type.name)) {
             const indent = Math.min(this.options.maxIndent, (node.attrs.indent || 0) + 1);
             if (dispatch) {
@@ -52,9 +73,9 @@ export const Indent = Extension.create({
         });
         return true;
       },
-      outdent: () => ({ tr, state, dispatch }) => {
+      outdent: () => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
-        tr.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+        tr.doc.nodesBetween(selection.from, selection.to, (node: any, pos: number) => {
           if (this.options.types.includes(node.type.name)) {
             const indent = Math.max(this.options.minIndent, (node.attrs.indent || 0) - 1);
             if (dispatch) {
@@ -105,11 +126,11 @@ export const LineHeight = Extension.create({
     ]
   },
 
-  addCommands() {
+  addCommands(): any {
     return {
-      setLineHeight: (lineHeight: string) => ({ tr, state, dispatch }) => {
+      setLineHeight: (lineHeight: string) => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
-        tr.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+        tr.doc.nodesBetween(selection.from, selection.to, (node: any, pos: number) => {
           if (this.options.types.includes(node.type.name)) {
             if (dispatch) {
               tr.setNodeMarkup(pos, undefined, {
@@ -122,9 +143,9 @@ export const LineHeight = Extension.create({
         });
         return true;
       },
-      unsetLineHeight: () => ({ tr, state, dispatch }) => {
+      unsetLineHeight: () => ({ tr, state, dispatch }: any) => {
         const { selection } = state;
-        tr.doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+        tr.doc.nodesBetween(selection.from, selection.to, (node: any, pos: number) => {
           if (this.options.types.includes(node.type.name)) {
             if (dispatch) {
               tr.setNodeMarkup(pos, undefined, {

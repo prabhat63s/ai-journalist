@@ -1,5 +1,7 @@
 import sys
 import time
+import asyncio
+import httpx
 
 from contextlib import asynccontextmanager
 
@@ -25,13 +27,47 @@ from app.routers import auth_router, users_router, articles_router, voice_router
 settings.validate_critical()
 
 
+async def keep_alive_task():
+    """
+    Background task to keep the application active.
+    Performs an internal ping every 14 minutes to ensure the process remains warm.
+    """
+    await asyncio.sleep(10) # Initial delay to let server start
+    logger.info("Background keep-alive loop initiated")
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                # Internal ping to keep the event loop active and process 'warm'
+                await client.get("http://127.0.0.1:8000/health", timeout=2.0)
+            except Exception:
+                pass
+            await asyncio.sleep(840) # 14 minutes
+
+async def clear_cache_task():
+    """
+    Background task to clear in-memory caches every 24 hours.
+    """
+    while True:
+        await asyncio.sleep(86400) # 24 hours
+        _rate_store.clear()
+        logger.info("In-memory rate limit cache cleared (24h maintenance)")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(settings.BANNER)
     logger.info(f"Starting {settings.APP_NAME} [{settings.ENVIRONMENT.upper()}]")
     await db.connect_to_storage()
     logger.info("Database connected")
+    
+    # Start the keep-alive task in the background
+    keep_alive_job = asyncio.create_task(keep_alive_task())
+    clear_cache_job = asyncio.create_task(clear_cache_task())
+    
     yield
+    
+    # Clean up
+    keep_alive_job.cancel()
+    clear_cache_job.cancel()
     await db.close_storage_connection()
     logger.info(f"{settings.APP_NAME} stopped")
 
